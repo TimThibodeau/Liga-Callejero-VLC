@@ -8,6 +8,8 @@
 <title>Liga del Callejero</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
 <style>
 /* Layout: one narrow phone-first column; a red brigade band on top, a ceramic street plaque as the question card. */
@@ -128,6 +130,10 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .feed .ev{display:flex;gap:10px;align-items:center;font-size:14px}
 .feed .ev>span:nth-child(2){flex:1;min-width:0}
 .feed .t{font-size:12px;white-space:nowrap}
+.mapbox{display:flex;flex-direction:column;gap:6px}
+#qmap{height:230px;border-radius:10px;border:1px solid var(--line);z-index:0}
+.maplinks{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
+.maplinks a{color:var(--p0);font-weight:600}
 .big{font-family:var(--display);font-weight:700;font-size:22px}
 .scroll{overflow-x:auto}
 .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden}
@@ -240,7 +246,7 @@ const S = {
   db: null, user: null, uid: null, canWrite: true, writeError: null,
   pid: ls.get("cbl.pid"), players: {}, days: {}, subs: {}, loaded: false,
   quiz: null, rankRange: "semana", rankSort: "pts", champ: null,
-  free: { blocks: new Set(["C"]), n: 10, parks: new Set([0,1,2,3,4]) },
+  free: { blocks: new Set(["C"]), n: 10, parks: new Set([0,1,2,3,4]), addr: true },
 };
 if(!["hoy","libre","rank","fallos"].includes(S.view)) S.view = "hoy";
 
@@ -261,7 +267,7 @@ function dailyPlan(ds){
   const rnd = mulberry(hashStr("reto|"+ds)());
   let mix;
   if(ds < MIX_V2_FROM) mix = DAILY_MIX_V1;
-  else { const ega = rnd() < 0.2; mix = ega ? [["C",7],["E",1],["M",1],["G",1]] : [["C",8],["E",1],["M",1]]; }
+  else { const ega = rnd() < 0.22; const hm = rnd() < 0.5 ? "H" : "M"; mix = ega ? [["C",6],[hm,1],["E",2],["G",1]] : [["C",7],[hm,1],["E",2]]; }
   const out = [];
   for(const [b,n] of mix) out.push(...sample(BYBLOCK[b]||[], n, rnd));
   return {mix, ids: sample(out, out.length, rnd)};
@@ -456,6 +462,7 @@ function libreHTML(){
   h += `<div class="card" style="display:flex;flex-direction:column;gap:16px"><div><h2 style="font-size:30px">Entreno libre</h2><p class="muted" style="margin:4px 0 0">Haz todas las tandas que quieras. Cada punto suma a la liga de la semana y del mes.</p></div>`;
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Qué entra</div><div class="chips">${Object.keys(BLOCKS).map(b=>`<button class="chip" data-block="${b}" aria-pressed="${f.blocks.has(b)}">${BLOCKS[b]}<span class="c">${(BYBLOCK[b]||[]).length}</span></button>`).join("")}</div></div>`;
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Parques que entran</div><div class="chips">${PARKS.map((_,i)=>`<button class="chip" data-park="${i}" aria-pressed="${f.parks.has(i)}"><span class="ans" style="--pc:var(--p${i})"><i></i></span> ${PSHORT[i]}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Filtra por parque principal para estudiar la zona de un parque cada vez.</p></div>`;
+  h += `<div><div class="eyebrow" style="margin-bottom:8px">Pistas</div><div class="chips"><button class="chip" id="addrT" aria-pressed="${f.addr}">Mostrar dirección o traducción</button></div><p class="muted" style="font-size:13px;margin:6px 0 0">Quítalas para el modo difícil: solo el nombre del sitio. Se ven al responder.</p></div>`;
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Preguntas por tanda</div><div class="seg" role="group">${[10,20,50].map(n=>`<button data-n="${n}" aria-pressed="${f.n===n}">${n}</button>`).join("")}</div></div>`;
   h += `<div class="spread"><span class="muted">${pool.length.toLocaleString("es-ES")} lugares en juego</span><button class="btn" id="startFree" ${pool.length?"":"disabled"}>Empezar tanda</button></div></div>`;
   const myBest = survBest(S.pid), top = survTop();
@@ -562,7 +569,7 @@ function quizHTML(){
   const got = q.results.reduce((s,r)=>s+r.sc,0);
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got)} pts</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
-    <div class="plaque"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[0]!=="P"?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
+    <div class="plaque"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[0]!=="P"&&(q.mode==="daily"||S.free.addr||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
   const btns = (row) => PARKS.map((_,i)=>{
     let cls = "", pressed = row==="multi"?q.sel.multi.has(i):q.sel[row]===i;
     if(q.answered){
@@ -582,6 +589,7 @@ function quizHTML(){
     const sc = q.results[q.results.length-1].sc;
     const v = sc===1?"v1":sc===0.5?"v05":"v0";
     h += `<div class="verdict ${v}" role="status"><span>${sc===1?"Correcto":sc===0.5?"Medio acierto":"Fallo"} · ${ansHTML(it)}</span><span class="pts">+${fmt(sc)}</span></div>
+      ${mapHTML(it)}
       <button class="btn" id="nextQ">${(q.mode==="surv"?sc===1:q.i+1<q.ids.length)?"Siguiente":"Ver resultado"}</button>`;
   }
   if(!q.answered && q.mode!=="daily") h += `<button class="btn ghost small" id="quitQ" style="align-self:flex-start">${q.mode==="surv"?"Plantarse y guardar la racha":"Dejar la tanda"}</button>`;
@@ -623,6 +631,21 @@ function answer(){
   }
   render();
 }
+function mapHTML(it){
+  if(it.length<7) return "";
+  const [lat,lng,approx] = [it[5],it[6],it[7]];
+  const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${lat}" data-lng="${lng}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${approx?"Punto aproximado: un punto de la calle, no el portal":"Ubicación de la calle"}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div></div>`;
+}
+let MAP = null;
+function drawMap(){
+  if(MAP){ try{ MAP.remove(); }catch{} MAP = null; }
+  const el = $("#qmap"); if(!el || !window.L) return;
+  const ll = [+el.dataset.lat, +el.dataset.lng];
+  MAP = L.map(el, {scrollWheelZoom:false, attributionControl:true}).setView(ll, 15);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {maxZoom:19, subdomains:"abcd", attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(MAP);
+  L.circleMarker(ll, {radius:9, color:"#fff", weight:3, fillColor:"#C42A1C", fillOpacity:1}).addTo(MAP);
+}
 function next(){ const q=S.quiz; if(q.mode==="surv" && q.results.length && q.results[q.results.length-1].sc<1){ q.i=q.ids.length; q.answered=false; render(); return; } q.i++; q.answered=false; q.sel={p:null,a:null,multi:new Set()}; q.t0=performance.now(); render(); }
 
 function bindView(){
@@ -631,6 +654,8 @@ function bindView(){
   on("#startFree", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); });
   on("#startFails", ()=>{ const s=[...pendingFails()]; startQuiz("fails", sample(s, Math.min(20,s.length), Math.random)); });
   on("#nextQ", next);
+  drawMap();
+  on("#addrT", ()=>{ S.free.addr = !S.free.addr; render(); });
   on("#quitQ", ()=>{ const q=S.quiz; if(q.mode==="surv" && q.results.length && S.db && S.pid) mutateDay(today(), d=>addSurv(d, q.results.length)); S.quiz=null; render(); });
   on("#startSurv", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("surv", sample(BYBLOCK.C, 400, Math.random)); });
   document.querySelectorAll("[data-sort]").forEach(b=>b.addEventListener("click",()=>{ S.rankSort=b.dataset.sort; render(); }));
