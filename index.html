@@ -305,6 +305,7 @@ function mutateDay(ds, fn){
   flush(ds);
 }
 function handleWriteError(e){
+  try{ console.error("Error al guardar", e); }catch{}
   if(e && (e.code==="invalid_argument" || e.code==="not_granted" || e.code==="revoked")){
     S.canWrite = false;
     S.writeError = "No puedes guardar resultados con el acceso que tienes. Avisa a quien gestiona la liga.";
@@ -434,7 +435,7 @@ function duelHTML(ds, ids){
   ids.forEach((id,i)=>{
     const it = ITEMS[id];
     h += `<tr><td title="${esc(it[1])}">${esc(it[1])}</td><td style="text-align:left">${ansHTML(it)}</td>`;
-    for(const p of ps){ const a = (S.days[p.id][ds].dy.ans||[])[i]; const sc = a? a[1] : null; h += `<td>${markHTML(sc)}</td>`; }
+    for(const p of ps){ const a = (S.days[p.id][ds].dy.ans||[])[i]; const sc = a==null ? null : Array.isArray(a) ? a[1] : a.s; h += `<td>${markHTML(sc)}</td>`; }
     h += `</tr>`;
   });
   return h + `</tbody></table></div></div>`;
@@ -547,7 +548,7 @@ function startQuiz(mode, ids){
   S.quiz = {mode, ids, i:0, sel:{p:null,a:null,multi:new Set()}, answered:false, results:[], t0:performance.now(), prev: mode==="surv"?survBest(S.pid):0};
   if(mode==="daily"){
     const dy = myDays()[today()]?.dy;
-    if(dy?.ans?.length){ S.quiz.i = dy.ans.length; S.quiz.results = dy.ans.map(([id,sc])=>({id,sc})); }
+    if(dy?.ans?.length){ S.quiz.i = dy.ans.length; S.quiz.results = dy.ans.map(a=>Array.isArray(a)?{id:a[0],sc:a[1]}:{id:a.i,sc:a.s}); }
     else if(S.db && S.pid) mutateDay(today(), d=>{ d.dy = {ans:[],pts:0,ms:0,done:false,start:Date.now()}; });
   }
   render();
@@ -608,7 +609,7 @@ function answer(){
     mutateDay(today(), d=>{
       if(q.mode==="daily"){
         d.dy = d.dy || {ans:[],pts:0,ms:0,done:false,start:Date.now()};
-        d.dy.ans.push([id,sc,ms]); d.dy.pts += sc; d.dy.ms += ms;
+        d.dy.ans.push({i:id,s:sc,t:ms}); d.dy.pts += sc; d.dy.ms += ms;
         if(d.dy.ans.length>=q.ids.length){ d.dy.done = true; d.dy.end = Date.now(); }
       } else {
         d.fr = d.fr || {n:0,pts:0,ok:0};
