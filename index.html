@@ -643,7 +643,7 @@ function drawMap(){
   const el = $("#qmap"); if(!el || !window.L) return;
   const ll = [+el.dataset.lat, +el.dataset.lng];
   MAP = L.map(el, {scrollWheelZoom:false, attributionControl:true}).setView(ll, 15);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {maxZoom:19, subdomains:"abcd", attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(MAP);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(MAP);
   L.circleMarker(ll, {radius:9, color:"#fff", weight:3, fillColor:"#C42A1C", fillOpacity:1}).addTo(MAP);
 }
 function next(){ const q=S.quiz; if(q.mode==="surv" && q.results.length && q.results[q.results.length-1].sc<1){ q.i=q.ids.length; q.answered=false; render(); return; } q.i++; q.answered=false; q.sel={p:null,a:null,multi:new Set()}; q.t0=performance.now(); render(); }
