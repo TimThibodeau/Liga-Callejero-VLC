@@ -134,6 +134,16 @@ section.view{display:flex;flex-direction:column;gap:16px}
 #qmap{height:230px;border-radius:10px;border:1px solid var(--line);z-index:0}
 .maplinks{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
 .maplinks a{color:var(--p0);font-weight:600}
+.fc{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end}
+.fcol{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px}
+.fcol i{display:block;width:70%;max-width:34px;background:var(--brand);border-radius:4px 4px 0 0;opacity:.85}
+.fcol .num{font-size:16px;font-weight:700}
+.pbars{display:flex;flex-direction:column;gap:12px}
+.pbar{display:grid;grid-template-columns:96px 1fr 48px;gap:4px 10px;align-items:center}
+.pbar .track{height:10px;background:var(--surface-2);border-radius:5px;overflow:hidden}
+.pbar .track i{display:block;height:100%;border-radius:5px}
+.pbar .num{font-weight:700;text-align:right;font-size:17px}
+.pbar .sub{grid-column:2 / 4;font-size:12px}
 .big{font-family:var(--display);font-weight:700;font-size:22px}
 .scroll{overflow-x:auto}
 .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden}
@@ -204,7 +214,7 @@ const firebaseConfig = {
   <button role="tab" id="t-hoy" aria-selected="true" data-v="hoy">Reto</button>
   <button role="tab" id="t-libre" aria-selected="false" data-v="libre">Entreno</button>
   <button role="tab" id="t-rank" aria-selected="false" data-v="rank">Ranking</button>
-  <button role="tab" id="t-fallos" aria-selected="false" data-v="fallos">Fallos</button>
+  <button role="tab" id="t-fallos" aria-selected="false" data-v="fallos">Repaso</button>
 </div></nav>
 <main class="wrap" id="main">
   <section class="view card"><p class="muted">Cargando las 5.500 calles y equipamientos…</p></section>
@@ -260,8 +270,8 @@ function scoreOf(item, sel){
     return hit>0 ? 0.5 : 0;
   }
   if(a<0) return sel.p===p ? 1 : 0;
-  const n = (sel.p===p) + (sel.a===a);
-  return n===2 ? 1 : n===1 ? 0.5 : 0;
+  if(sel.p!==p) return 0;
+  return sel.a===a ? 1 : 0.5;
 }
 function dailyPlan(ds){
   const rnd = mulberry(hashStr("reto|"+ds)());
@@ -351,16 +361,16 @@ function avatar(pid){ const a = aliasOf(pid); return `<span class="av" style="ba
 function setView(v){
   S.view = v;
   try{ history.replaceState(null,"","#"+v); }catch{}
-  if(S.quiz && S.quiz.mode!=="daily" && v!=="libre" && v!=="fallos") S.quiz = null;
-  if(S.quiz && S.quiz.mode==="daily" && v!=="hoy") S.quiz = null;
+  if(S.quiz && quizHome(S.quiz.mode)!==v) S.quiz = null;
   render(); window.scrollTo({top:0});
 }
 document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.v)));
 
+function quizHome(m){ return m==="daily"?"hoy":(m==="srs"||m==="fails")?"fallos":"libre"; }
 function render(){
   document.querySelectorAll("nav.tabs button").forEach(b=>{
     b.setAttribute("aria-selected", String(b.dataset.v===S.view));
-    const pending = b.dataset.v==="hoy" && S.pid && ITEMS.length && !myDays()[today()]?.dy?.done;
+    const pending = (b.dataset.v==="hoy" && S.pid && ITEMS.length && !myDays()[today()]?.dy?.done) || (b.dataset.v==="fallos" && SRS.loaded && ITEMS.length && srsDueCount()>0);
     b.innerHTML = esc(b.textContent.replace(/\s+$/,"")) + (pending?'<span class="dot" aria-label="pendiente"></span>':"");
   });
   const chip = $("#meChip");
@@ -369,9 +379,10 @@ function render(){
   const main = $("#main");
   if(!ITEMS.length) return;
   S.champ = lastChampion()?.id || null;
+  ensureSrs();
   let html = "";
   if(S.writeError) html += `<div class="notice bad" role="alert">${esc(S.writeError)}</div>`;
-  if(S.quiz && ((S.quiz.mode==="daily"&&S.view==="hoy")||(S.quiz.mode!=="daily"&&(S.view==="libre"||S.view==="fallos")))) html += quizHTML();
+  if(S.quiz && quizHome(S.quiz.mode)===S.view) html += quizHTML();
   else if(S.view==="hoy") html += hoyHTML();
   else if(S.view==="libre") html += libreHTML();
   else if(S.view==="rank") html += rankHTML();
@@ -508,7 +519,7 @@ function rankHTML(){
   const label = {hoy:"Hoy",semana:"Esta semana",mes:"Este mes",todo:"Desde el principio"}[S.rankRange];
   let h = `<div class="card"><div class="spread"><div><div class="eyebrow">${label}</div><h2 style="font-size:30px">La liga</h2></div>
     <div class="seg" role="group">${["hoy","semana","mes","todo"].map(r=>`<button data-range="${r}" aria-pressed="${S.rankRange===r}">${r==="todo"?"Total":r}</button>`).join("")}</div></div>
-    <p class="muted" style="font-size:14px;margin:8px 0 12px">Puntos = reto diario + entreno libre. Acierto completo 1 punto, solo uno de los dos parques medio punto.</p><div class="row" style="margin-bottom:10px"><span class="eyebrow">Ordenar por</span><div class="seg" role="group">${[["pts","Puntos"],["reto","Reto"],["acc","Acierto"]].map(([k,l])=>`<button data-sort="${k}" aria-pressed="${S.rankSort===k}">${l}</button>`).join("")}</div></div>${S.rankSort==="acc"?`<p class="muted" style="font-size:13px;margin:0 0 10px">Para entrar en el orden por acierto hacen falta 30 preguntas en el periodo.</p>`:""}`;
+    <p class="muted" style="font-size:14px;margin:8px 0 12px">Puntos = reto diario + entreno libre. Los dos parques bien, 1 punto. Principal bien y apoyo mal, medio punto. Si fallas el principal, 0.</p><div class="row" style="margin-bottom:10px"><span class="eyebrow">Ordenar por</span><div class="seg" role="group">${[["pts","Puntos"],["reto","Reto"],["acc","Acierto"]].map(([k,l])=>`<button data-sort="${k}" aria-pressed="${S.rankSort===k}">${l}</button>`).join("")}</div></div>${S.rankSort==="acc"?`<p class="muted" style="font-size:13px;margin:0 0 10px">Para entrar en el orden por acierto hacen falta 30 preguntas en el periodo.</p>`:""}`;
   if(!rows.length) h += `<p class="muted">Aún no hay nadie en la liga. Elige tu nombre para estrenarla.</p>`;
   else{
     h += `<div class="scroll"><table class="tbl"><thead><tr><th>#</th><th>Jugador</th><th>Puntos</th><th>Pts reto</th><th>Acierto</th><th>Retos</th><th title="Retos diarios ganados (días cerrados)">Ganados</th><th title="Días seguidos haciendo el reto">Racha</th></tr></thead><tbody>`;
@@ -539,20 +550,122 @@ function recordsHTML(){
 }
 function earliestDay(){ let m = today(); for(const pid in S.days) for(const ds in S.days[pid]) if(ds<m) m=ds; return m; }
 
-// ----- FALLOS -----
+// ----- REPASO (tipo Anki) -----
+const DAY0 = Date.UTC(2020,0,1);
+const dnum = ds => Math.round((Date.parse(ds+"T00:00:00Z")-DAY0)/86400000);
+const SRS = { loaded:false, c:{}, cfg:{n:10, b:["C"]}, nd:"", nn:0, sub:null, busy:false, dirty:false, timer:null, pidSub:null };
+function srsGet(id){ const v=SRS.c[id]; if(!v) return null; const [d,iv,e,r,l]=String(v).split(",").map(Number); return {d,iv,e,r,l}; }
+function srsPut(id,o){ SRS.c[id]=[o.d,o.iv,o.e,o.r,o.l].join(","); }
+function srsRef(){ return S.db && S.pid ? S.db.doc(`players/${S.pid}/srs/main`) : null; }
+function ensureSrs(){ if(S.db && S.pid && SRS.pidSub!==S.pid){ SRS.pidSub=S.pid; srsSubscribe(); } }
+function srsSubscribe(){
+  if(SRS.sub){ try{SRS.sub();}catch{} SRS.sub=null; }
+  SRS.loaded=false; SRS.c={}; SRS.cfg={n:10,b:["C"]}; SRS.nd=""; SRS.nn=0;
+  const ref=srsRef(); if(!ref) return;
+  SRS.sub = ref.onSnapshot(snap=>{
+    if(SRS.busy || SRS.dirty) return;
+    const v = snap.exists ? snap.data() : null;
+    if(v){ SRS.c={...(v.c||{})}; SRS.cfg={n:10,b:["C"],...(v.cfg||{})}; SRS.nd=v.nd||""; SRS.nn=v.nn||0; }
+    const first = !SRS.loaded; SRS.loaded=true;
+    if(first) srsSeed();
+    if(!S.quiz) render();
+  }, e=>{ SRS.loaded=true; srsError(e); });
+}
+function srsSeed(){
+  if(!SRS.loaded || !S.myDaysLoaded || SRS.cfg.s) return;
+  const t=dnum(today());
+  for(const id of pendingFails()) if(!srsGet(id)) srsPut(id,{d:t,iv:0,e:250,r:0,l:1});
+  SRS.cfg.s=1; srsSave();
+}
+function srsSave(){ SRS.dirty=true; clearTimeout(SRS.timer); SRS.timer=setTimeout(srsFlush, 800); }
+async function srsFlush(){
+  const ref=srsRef(); if(!ref || !S.canWrite){ SRS.dirty=false; return; }
+  if(SRS.busy){ SRS.timer=setTimeout(srsFlush,500); return; }
+  SRS.busy=true; SRS.dirty=false;
+  try{ await ref.set({c:SRS.c, cfg:SRS.cfg, nd:SRS.nd, nn:SRS.nn, u:Date.now()}); }catch(e){ srsError(e); }
+  SRS.busy=false;
+}
+function srsError(e){ try{console.error("Repaso",e);}catch{} S.writeError="No se ha podido guardar el repaso. En la web de GitHub, revisa que has pegado las reglas nuevas en Firebase (Firestore → Reglas)."; render(); }
+function srsAnswer(id, sc, inRepaso){
+  if(!SRS.loaded || !S.pid) return;
+  const t=dnum(today()); let c=srsGet(id);
+  if(!c){ if(!inRepaso && sc>=1) return; c={d:t,iv:0,e:250,r:0,l:0}; }
+  else if(!inRepaso && sc>=1) return;
+  if(sc>=1){ c.iv = c.r===0?1 : c.r===1?3 : Math.max(c.iv+1, Math.round(c.iv*c.e/100)); c.r++; }
+  else if(sc>=0.5){ c.iv = Math.max(1, Math.round(c.iv*1.2)); c.e=Math.max(130,c.e-15); c.r++; }
+  else { c.iv=1; c.e=Math.max(130,c.e-20); c.l++; c.r=0; }
+  c.d = (!inRepaso && sc<1) ? t : t + c.iv;
+  srsPut(id,c); srsSave();
+}
+function srsDue(){ const t=dnum(today()); const out=[]; for(const k in SRS.c){ const c=srsGet(k); if(c && c.d<=t) out.push([+k,c.d]); } out.sort((a,b)=>a[1]-b[1]); return out.map(x=>x[0]); }
+function srsDueCount(){ const t=dnum(today()); let n=0; for(const k in SRS.c){ const d=parseInt(SRS.c[k],10); if(d<=t) n++; } return n; }
+function srsNewLeft(){ const n=SRS.cfg.n||0; const used = SRS.nd===today()?SRS.nn:0; return Math.max(0,n-used); }
+function srsNewPick(k){ if(k<=0) return []; const pool=[]; for(const b of (SRS.cfg.b||["C"])) for(const id of BYBLOCK[b]||[]) if(!SRS.c[id]) pool.push(id); return sample(pool,k,Math.random); }
+function srsForecast(days){ const t=dnum(today()); let n=0; for(const k in SRS.c){ const d=parseInt(SRS.c[k],10); if(d===t+days) n++; } return n; }
+function startSrs(){
+  if(!S.pid && S.db && S.canWrite) return askWho();
+  const due=srsDue().slice(0,300); const nw=srsNewPick(srsNewLeft());
+  if(!due.length && !nw.length) return render();
+  startQuiz("srs", due.concat(nw)); S.quiz.newSet=new Set(nw);
+}
+function recordStats(d, it, sel, sc){
+  if(Array.isArray(it[3]) || sel.p==null) return;
+  d.cm = d.cm || Array(25).fill(0); d.cm[it[3]*5+sel.p]++;
+  if(it[4]>=0 && sel.p===it[3] && sel.a!=null){ d.ca = d.ca || Array(25).fill(0); d.ca[it[4]*5+sel.a]++; }
+  d.bk = d.bk || {}; const b=(d.bk[it[0]]||[0,0]).slice(); b[0]++; b[1]+=sc; d.bk[it[0]]=b;
+}
 function fallosHTML(){
-  const set = [...pendingFails()];
-  let h = offlineNote() + `<div class="card"><div class="spread"><div><h2 style="font-size:30px">Tus fallos</h2><p class="muted" style="margin:4px 0 0">Lo que has fallado (o medio fallado) y aún no has corregido. Al acertarlo sale de la lista.</p></div>
-    <button class="btn" id="startFails" ${set.length?"":"disabled"}>Repasar ${Math.min(set.length,20)||""}</button></div></div>`;
-  if(set.length){
-    h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">${set.length} pendientes</div><div class="fails">${set.slice(-60).reverse().map(id=>{const it=ITEMS[id]; return `<div class="f"><span><b>${esc(it[1])}</b> <span class="muted">· ${esc(BLOCK_ONE[it[0]])}</span></span>${ansHTML(it)}</div>`;}).join("")}</div>${set.length>60?`<p class="muted" style="font-size:13px">Se muestran los 60 más recientes.</p>`:""}</div>`;
-  } else h += `<p class="muted">Sin fallos pendientes. Haz el reto o una tanda de entreno y aquí irán apareciendo los que se te resistan.</p>`;
+  let h = offlineNote();
+  const ready = SRS.loaded;
+  const due = ready?srsDueCount():0, nw = ready?Math.min(srsNewLeft(), srsNewPick(srsNewLeft()).length):0;
+  const cards = Object.keys(SRS.c);
+  h += `<div class="card"><div class="spread"><div style="flex:1 1 280px;min-width:0"><h2 style="font-size:30px">Repaso</h2><p class="muted" style="margin:4px 0 0">Como Anki: cada día te salen las que te tocan. Si aciertas, vuelven cada vez más tarde (1, 3, 7… días). Si fallas, vuelven mañana. Lo que falles en el reto, el entreno o Supervivencia entra aquí solo y te sale ese mismo día.</p></div>`;
+  if(!S.db) h += `</div>`;
+  else if(!ready) h += `</div><p class="muted" style="margin:10px 0 0">Cargando tus tarjetas…</p>`;
+  else if(due+nw>0) h += `<button class="btn" id="startSrs">Empezar · ${due+nw}</button></div><p style="margin:10px 0 0;font-size:15px">Hoy te tocan <b>${due}</b> repasos${nw?` y <b>${nw}</b> nuevas`:""}.</p>`;
+  else h += `</div><p style="margin:10px 0 0;font-size:15px"><b>Hoy está todo al día.</b> Mañana te tocan ${srsForecast(1)}.</p>`;
+  h += `</div>`;
+  if(ready && S.db){
+    const mature = cards.filter(k=>{const c=srsGet(k); return c.iv>=21;}).length;
+    const learning = cards.length - mature;
+    h += `<div class="card grid2"><div class="stat"><span class="eyebrow">En estudio</span><span class="num">${learning}</span></div><div class="stat"><span class="eyebrow">Aprendidas</span><span class="num">${mature}</span><span class="muted" style="font-size:12px">vuelven en 3 semanas o más</span></div><div class="stat"><span class="eyebrow">Total</span><span class="num">${cards.length}</span></div></div>`;
+    const fc = Array.from({length:7},(_,i)=>srsForecast(i+1)); const mx=Math.max(1,...fc);
+    h += `<div class="card"><div class="eyebrow" style="margin-bottom:10px">Próximos 7 días</div><div class="fc">${fc.map((n,i)=>{const ds=addDays(today(),i+1); const lab=new Date(ds+"T12:00:00Z").toLocaleDateString("es-ES",{weekday:"short",timeZone:"UTC"}).replace(".",""); return `<div class="fcol"><span class="num">${n}</span><i style="height:${Math.round(56*n/mx)+2}px"></i><span class="muted">${lab}</span></div>`;}).join("")}</div></div>`;
+    h += `<div class="card" style="display:flex;flex-direction:column;gap:12px"><div><div class="eyebrow" style="margin-bottom:8px">Nuevas por día</div><div class="seg" role="group">${[0,10,20,30].map(n=>`<button data-srsn="${n}" aria-pressed="${(SRS.cfg.n||0)===n}">${n}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Tarjetas que aún no has visto y que entran en el repaso cada día, como las nuevas de Anki. Con 0 solo repasas tus fallos.</p></div>
+      <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
+    const beasts = cards.map(k=>({id:+k,c:srsGet(k)})).filter(x=>x.c.l>=2).sort((a,b)=>b.c.l-a.c.l).slice(0,10);
+    if(beasts.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Tus bestias negras</div><div class="fails">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="f"><span><b>${esc(it[1])}</b> <span class="muted">· ${x.c.l} fallos</span></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
+  }
+  h += statsHTML();
   return h;
+}
+function statsHTML(){
+  const cm=Array(25).fill(0), ca=Array(25).fill(0), bk={};
+  for(const ds in myDays()){ const d=myDays()[ds]; (d.cm||[]).forEach((v,i)=>cm[i]+=v); (d.ca||[]).forEach((v,i)=>ca[i]+=v); for(const b in (d.bk||{})){ const x=bk[b]||(bk[b]=[0,0]); x[0]+=d.bk[b][0]; x[1]+=d.bk[b][1]; } }
+  const tot = cm.reduce((a,b)=>a+b,0);
+  let h = `<div class="card"><h3 style="font-size:24px">Tus puntos débiles</h3>`;
+  if(tot<10) return h + `<p class="muted" style="margin:6px 0 0">Se cuenta qué parque marcas en cada pregunta desde esta versión. Cuando lleves al menos 10 respuestas, aquí verás tu acierto por parque y qué parques confundes.</p></div>`;
+  const rows = PARKS.map((_,i)=>{ let n=0; for(let j=0;j<5;j++) n+=cm[i*5+j]; const ok=cm[i*5+i]; let wj=-1,wn=0; for(let j=0;j<5;j++) if(j!==i && cm[i*5+j]>wn){wn=cm[i*5+j];wj=j;} let na=0; for(let j=0;j<5;j++) na+=ca[i*5+j]; return {i,n,ok,acc:n?ok/n:0,wj,wn,na,oka:ca[i*5+i]}; });
+  const valid = rows.filter(r=>r.n>=5).sort((a,b)=>a.acc-b.acc);
+  const worst = valid[0];
+  h += `<p class="muted" style="margin:4px 0 12px;font-size:14px">Acierto del parque principal según cuál era el correcto. ${tot} respuestas.</p><div class="pbars">`;
+  for(const r of rows){ if(!r.n) continue; const pct=Math.round(r.acc*100);
+    h += `<div class="pbar"><span class="ans" style="--pc:var(--p${r.i})"><i></i>${PSHORT[r.i]}</span><div class="track"><i style="width:${pct}%;background:var(--p${r.i})"></i></div><span class="num">${pct} %</span><span class="muted sub">${r.n} preg.${r.wn?` · confundes con ${PSHORT[r.wj]} (${r.wn})`:""}</span></div>`; }
+  h += `</div>`;
+  const conf=[]; for(let i=0;i<5;i++) for(let j=0;j<5;j++) if(i!==j && cm[i*5+j]) conf.push({i,j,n:cm[i*5+j]});
+  conf.sort((a,b)=>b.n-a.n);
+  if(conf.length) h += `<div class="eyebrow" style="margin:16px 0 6px">Confusiones que más repites</div><div class="fails">${conf.slice(0,5).map(c=>{const rowN=rows[c.i].n; return `<div class="f"><span>Es <b>${PSHORT[c.i]}</b> y marcas <b>${PSHORT[c.j]}</b></span><span class="muted">${c.n} ${c.n===1?"vez":"veces"} · ${Math.round(100*c.n/rowN)} %</span></div>`;}).join("")}</div>`;
+  const apo = rows.filter(r=>r.na>=5);
+  if(apo.length) h += `<div class="eyebrow" style="margin:16px 0 6px">Parque de apoyo (cuando aciertas el principal)</div><div class="fails">${apo.map(r=>`<div class="f"><span>Cuando el apoyo es <b>${PSHORT[r.i]}</b></span><span class="muted">${Math.round(100*r.oka/r.na)} % de ${r.na}</span></div>`).join("")}</div>`;
+  const bks = Object.entries(bk).filter(([,x])=>x[0]>=5);
+  if(bks.length) h += `<div class="eyebrow" style="margin:16px 0 6px">Por tipo de sitio</div><div class="fails">${bks.map(([b,x])=>`<div class="f"><span>${BLOCKS[b]}</span><span class="muted">${Math.round(100*x[1]/x[0])} % de puntos · ${x[0]} preg.</span></div>`).join("")}</div>`;
+  if(worst) h += `<div class="spread" style="margin-top:16px"><span style="font-size:14px">Tu punto más flojo es <b>${PSHORT[worst.i]}</b> (${Math.round(worst.acc*100)} %).</span><button class="btn small" id="trainWeak" data-weak="${worst.i}">Entrenar ${PSHORT[worst.i]} · 20</button></div>`;
+  return h + `</div>`;
 }
 
 // ----- QUIZ -----
 function startQuiz(mode, ids){
-  S.quiz = {mode, ids, i:0, sel:{p:null,a:null,multi:new Set()}, answered:false, results:[], t0:performance.now(), prev: mode==="surv"?survBest(S.pid):0};
+  S.quiz = {mode, ids, i:0, sel:{p:null,a:null,multi:new Set()}, answered:false, results:[], seen:new Set(), req:new Set(), newSet:new Set(), t0:performance.now(), prev: mode==="surv"?survBest(S.pid):0};
   if(mode==="daily"){
     const dy = myDays()[today()]?.dy;
     if(dy?.ans?.length){ S.quiz.i = dy.ans.length; S.quiz.results = dy.ans.map(a=>Array.isArray(a)?{id:a[0],sc:a[1]}:{id:a.i,sc:a.s}); }
@@ -565,7 +678,7 @@ function quizHTML(){
   if(q.i>=q.ids.length) return summaryHTML();
   const id = q.ids[q.i], it = ITEMS[id];
   const multi = Array.isArray(it[3]), hasA = !multi && it[4]>=0;
-  const title = q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="surv"?"Supervivencia":"Entreno libre";
+  const title = q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="srs"?"Repaso":q.mode==="surv"?"Supervivencia":"Entreno libre";
   const got = q.results.reduce((s,r)=>s+r.sc,0);
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got)} pts</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
@@ -592,7 +705,7 @@ function quizHTML(){
       ${mapHTML(it)}
       <button class="btn" id="nextQ">${(q.mode==="surv"?sc===1:q.i+1<q.ids.length)?"Siguiente":"Ver resultado"}</button>`;
   }
-  if(!q.answered && q.mode!=="daily") h += `<button class="btn ghost small" id="quitQ" style="align-self:flex-start">${q.mode==="surv"?"Plantarse y guardar la racha":"Dejar la tanda"}</button>`;
+  if(!q.answered && q.mode!=="daily") h += `<button class="btn ghost small" id="quitQ" style="align-self:flex-start">${q.mode==="surv"?"Plantarse y guardar la racha":q.mode==="srs"?"Dejar el repaso (se guarda)":"Dejar la tanda"}</button>`;
   return h;
 }
 function summaryHTML(){
@@ -603,9 +716,10 @@ function summaryHTML(){
     <div class="row" style="margin-top:14px"><button class="btn" id="again">Otra vez</button><button class="btn ghost" id="closeQ">Cerrar</button></div></div>
     ${last&&last.sc<1?`<div class="card"><div class="eyebrow" style="margin-bottom:6px">Te ha eliminado</div><div class="fails"><div class="f"><span>${markHTML(last.sc)} <b>${esc(ITEMS[last.id][1])}</b></span>${ansHTML(ITEMS[last.id])}</div></div></div>`:""}`; }
   const miss = q.results.filter(r=>r.sc<1);
-  let h = `<div class="card"><div class="eyebrow">${q.mode==="daily"?"Reto del día terminado":"Tanda terminada"}</div>
+  let h = `<div class="card"><div class="eyebrow">${q.mode==="daily"?"Reto del día terminado":q.mode==="srs"?"Repaso terminado":"Tanda terminada"}</div>
     <div class="hero-score" style="margin-top:6px"><span class="num">${fmt(tot)}</span><span class="muted">/ ${q.ids.length}${q.mode==="daily"?" · "+fmtT(myDays()[today()]?.dy?.ms||0):""}</span></div>
-    <div class="row" style="margin-top:14px">${q.mode==="daily"?`<button class="btn" id="seeRank">Ver la clasificación</button>`:`<button class="btn" id="again">Otra tanda</button>`}<button class="btn ghost" id="closeQ">Cerrar</button></div></div>`;
+    ${q.mode==="srs"?`<p class="muted" style="margin:8px 0 0">Mañana te tocan ${srsForecast(1)} tarjetas.</p>`:""}
+    <div class="row" style="margin-top:14px">${q.mode==="daily"?`<button class="btn" id="seeRank">Ver la clasificación</button>`:q.mode==="srs"?(srsDueCount()?`<button class="btn" id="again">Seguir repasando</button>`:""):`<button class="btn" id="again">Otra tanda</button>`}<button class="btn ghost" id="closeQ">Cerrar</button></div></div>`;
   if(miss.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Para repasar</div><div class="fails">${miss.map(r=>{const it=ITEMS[r.id]; return `<div class="f"><span>${markHTML(r.sc)} <b>${esc(it[1])}</b></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
   return h;
 }
@@ -625,10 +739,11 @@ function answer(){
         if(q.mode==="surv" && sc<1) addSurv(d, q.results.length-1);
       }
       recordOutcome(d, id, sc);
+      recordStats(d, it, q.sel, sc);
     });
-  } else if(q.mode==="daily" && !S.db){
-    // offline practice of the daily: keep locally only
   }
+  if(q.mode==="srs"){ if(!q.seen.has(id)){ q.seen.add(id); if(q.newSet.has(id)){ if(SRS.nd!==today()){ SRS.nd=today(); SRS.nn=0; } SRS.nn++; } srsAnswer(id, sc, true); } }
+  else srsAnswer(id, sc, false);
   render();
 }
 function mapHTML(it){
@@ -646,7 +761,7 @@ function drawMap(){
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(MAP);
   L.circleMarker(ll, {radius:9, color:"#fff", weight:3, fillColor:"#C42A1C", fillOpacity:1}).addTo(MAP);
 }
-function next(){ const q=S.quiz; if(q.mode==="surv" && q.results.length && q.results[q.results.length-1].sc<1){ q.i=q.ids.length; q.answered=false; render(); return; } q.i++; q.answered=false; q.sel={p:null,a:null,multi:new Set()}; q.t0=performance.now(); render(); }
+function next(){ const q=S.quiz; if(q.mode==="srs" && q.results.length && q.results[q.results.length-1].sc<1 && !q.req.has(q.ids[q.i])){ q.req.add(q.ids[q.i]); q.ids.push(q.ids[q.i]); } if(q.mode==="surv" && q.results.length && q.results[q.results.length-1].sc<1){ q.i=q.ids.length; q.answered=false; render(); return; } q.i++; q.answered=false; q.sel={p:null,a:null,multi:new Set()}; q.t0=performance.now(); render(); }
 
 function bindView(){
   const on = (sel, fn) => { const el=$(sel); if(el) el.addEventListener("click", fn); };
@@ -654,6 +769,10 @@ function bindView(){
   on("#startFree", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); });
   on("#startFails", ()=>{ const s=[...pendingFails()]; startQuiz("fails", sample(s, Math.min(20,s.length), Math.random)); });
   on("#nextQ", next);
+  on("#startSrs", startSrs);
+  on("#trainWeak", e=>{ const k=+e.currentTarget.dataset.weak; const pool=[]; for(const b of ["C","E"]) for(const id of BYBLOCK[b]||[]) if(ITEMS[id][3]===k) pool.push(id); S.view="libre"; startQuiz("free", sample(pool, Math.min(20,pool.length), Math.random)); });
+  document.querySelectorAll("[data-srsn]").forEach(b=>b.addEventListener("click",()=>{ SRS.cfg.n=+b.dataset.srsn; srsSave(); render(); }));
+  document.querySelectorAll("[data-srsb]").forEach(b=>b.addEventListener("click",()=>{ const k=b.dataset.srsb; let a=(SRS.cfg.b||[]).slice(); a=a.includes(k)?a.filter(x=>x!==k):a.concat(k); if(!a.length) a=[k]; SRS.cfg.b=a; srsSave(); render(); }));
   drawMap();
   on("#addrT", ()=>{ S.free.addr = !S.free.addr; render(); });
   on("#quitQ", ()=>{ const q=S.quiz; if(q.mode==="surv" && q.results.length && S.db && S.pid) mutateDay(today(), d=>addSurv(d, q.results.length)); S.quiz=null; render(); });
@@ -661,7 +780,7 @@ function bindView(){
   document.querySelectorAll("[data-sort]").forEach(b=>b.addEventListener("click",()=>{ S.rankSort=b.dataset.sort; render(); }));
   const mf=$("#msgForm"); if(mf) mf.addEventListener("submit", e=>{ e.preventDefault(); const v=$("#msgIn").value.trim().slice(0,80); mutateDay(today(), d=>{ if(d.dy) d.dy.msg=v; }); render(); });
   on("#closeQ", ()=>{ S.quiz=null; render(); });
-  on("#again", ()=>{ const m=S.quiz.mode; S.quiz=null; if(m==="surv") return startQuiz("surv", sample(BYBLOCK.C, 400, Math.random)); if(m==="fails"){ const s=[...pendingFails()]; if(s.length) return startQuiz("fails", sample(s,Math.min(20,s.length),Math.random)); render(); } else { const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); } });
+  on("#again", ()=>{ const m=S.quiz.mode; S.quiz=null; if(m==="surv") return startQuiz("surv", sample(BYBLOCK.C, 400, Math.random)); if(m==="srs") return startSrs(); if(m==="fails"){ const s=[...pendingFails()]; if(s.length) return startQuiz("fails", sample(s,Math.min(20,s.length),Math.random)); render(); } else { const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); } });
   on("#seeRank", ()=>{ S.quiz=null; S.rankRange="hoy"; render(); });
   on("#checkMulti", answer);
   document.querySelectorAll(".park").forEach(b=>b.addEventListener("click",()=>pickPark(b.dataset.row, +b.dataset.i)));
@@ -728,6 +847,7 @@ function subscribeDays(pid){
     }
     if(pid===S.pid) for(const ds in local) if(!next[ds]) next[ds] = local[ds];
     S.days[pid] = next;
+    if(pid===S.pid){ S.myDaysLoaded = true; srsSeed(); }
     if(!S.quiz || S.view==="rank") render(); else updateLightly();
   }, ()=>{});
 }
