@@ -256,6 +256,23 @@ const firebaseConfig = {
 "use strict";
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
+const DATA_V = "10";
+const TYPE_ES = {"C/":"Calle","AV":"Avenida","PL":"Plaza","PL.":"Plaza","CAMI":"Camino","CTRA":"Carretera","ENTD":"Entrada","CV":"Camino Viejo","SENDA":"Senda","PG":"Paseo","PTGE":"Pasaje","GV":"Gran Vía","PTDA":"Partida","PARTIDA":"Partida","CRA":"Carrera","GRUP":"Grupo","BARRI":"Barrio","PONT":"Puente","GLORIETA":"Glorieta"};
+const LOWER = new Set(["de","del","la","las","los","el","y","i","en","d","l"]);
+function titleEs(t){ return t.toLowerCase().split(" ").map((w,i)=>/^[ivxlc]+$/.test(w)&&w.length>1?w.toUpperCase():(i>0&&LOWER.has(w))?w:w.charAt(0).toUpperCase()+w.slice(1)).join(" "); }
+function esName(it){
+  if(!it || it[0]!=="C" || !it[2]) return "";
+  let tr=String(it[2]).replace(/\.CARRER DE$/i,"").replace(/\.?\s*$/,"").trim(); if(!tr) return "";
+  const pre=it[1].split(" ")[0].toUpperCase(); const ty=TYPE_ES[pre]||"";
+  const full=(ty?ty+" ":"")+titleEs(tr);
+  const strip=x=>x.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  if(strip(tr)===strip(it[1].replace(/^\S+\s+/,""))) return "";
+  return full;
+}
+function langEs(){ return S.lang==="es"; }
+function bigName(it){ const es=esName(it); return langEs()&&es ? es : it[1]; }
+function smallName(it){ const es=esName(it); if(!es) return ""; return langEs() ? it[1] : es; }
+function esSub(it){ const es=esName(it); return es?` <span class="muted">· ${esc(es)}</span>`:""; }
 const BLOCKS = {C:"Calles",E:"Equipamientos",M:"Museos y monumentos",H:"Hospitales",G:"EGAs",P:"Puentes del Turia",J:"Parques y jardines"};
 const BLOCK_ONE = {C:"Calle",E:"Equipamiento municipal",M:"Museo / monumento",H:"Hospital / centro",G:"EGA",P:"Puente del Turia",J:"Parque / jardín"};
 const DAILY_MIX_V1 = [["C",5],["E",2],["M",1],["H",1],["G",1]];
@@ -286,6 +303,7 @@ const S = {
   db: null, user: null, uid: null, canWrite: true, writeError: null,
   pid: ls.get("cbl.pid"), players: {}, days: {}, subs: {}, loaded: false,
   quiz: null, rankRange: "semana", rankSort: "pts", champ: null, duels: [], duelsById: {}, duelForm: null, flags: [], flagsLoaded: false, route: null, rOrig: "p",
+  lang: (()=>{ try{ return localStorage.getItem("cbl.lang")||"va"; }catch{ return "va"; } })(),
   free: { blocks: new Set(["C"]), n: 10, parks: new Set([0,1,2,3,4]), addr: true },
 };
 if(!["hoy","libre","rutas","rank","fallos"].includes(S.view)) S.view = "hoy";
@@ -514,7 +532,8 @@ function libreHTML(){
   h += `<div class="card" style="display:flex;flex-direction:column;gap:16px"><div><h2 style="font-size:30px">Entreno libre</h2><p class="muted" style="margin:4px 0 0">Haz todas las tandas que quieras. Cada punto suma a la liga de la semana y del mes.</p></div>`;
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Qué entra</div><div class="chips">${Object.keys(BLOCKS).map(b=>`<button class="chip" data-block="${b}" aria-pressed="${f.blocks.has(b)}">${BLOCKS[b]}<span class="c">${(BYBLOCK[b]||[]).length}</span></button>`).join("")}</div></div>`;
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Parques que entran</div><div class="chips">${PARKS.map((_,i)=>`<button class="chip" data-park="${i}" aria-pressed="${f.parks.has(i)}"><span class="ans" style="--pc:var(--p${i})"><i></i></span> ${PSHORT[i]}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Filtra por parque principal para estudiar la zona de un parque cada vez.</p></div>`;
-  h += `<div><div class="eyebrow" style="margin-bottom:8px">Pistas</div><div class="chips"><button class="chip" id="addrT" aria-pressed="${f.addr}">Mostrar dirección o traducción</button></div><p class="muted" style="font-size:13px;margin:6px 0 0">Quítalas para el modo difícil: solo el nombre del sitio. Se ven al responder.</p></div>`;
+  h += `<div><div class="eyebrow" style="margin-bottom:8px">Pistas</div><div class="chips"><button class="chip" id="addrT" aria-pressed="${f.addr}">Mostrar dirección de equipamientos y museos</button></div><p class="muted" style="font-size:13px;margin:6px 0 0">Quítala para el modo difícil: solo el nombre del sitio. Se ve al responder.</p></div>`;
+  h += `<div><div class="eyebrow" style="margin-bottom:8px">Nombre de las calles en grande</div><div class="seg" role="group"><button data-lang="va" aria-pressed="${!langEs()}">Valenciano (oficial)</button><button data-lang="es" aria-pressed="${langEs()}">Castellano</button></div><p class="muted" style="font-size:13px;margin:6px 0 0">Siempre salen los dos: uno en grande y el otro debajo. Vale para todo: reto, entreno, repaso y rutas.</p></div>`;
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Preguntas por tanda</div><div class="seg" role="group">${[10,20,50].map(n=>`<button data-n="${n}" aria-pressed="${f.n===n}">${n}</button>`).join("")}</div></div>`;
   h += `<div class="spread"><span class="muted">${pool.length.toLocaleString("es-ES")} lugares en juego</span><button class="btn" id="startFree" ${pool.length?"":"disabled"}>Empezar tanda</button></div></div>`;
   const myBest = survBest(S.pid), top = survTop();
@@ -688,7 +707,7 @@ function fallosHTML(){
       <div><div class="eyebrow" style="margin-bottom:8px">Máximo de repasos al día</div><div class="seg" role="group">${[[50,"50"],[100,"100"],[150,"150"],[0,"Sin límite"]].map(([n,l])=>`<button data-srscap="${n}" aria-pressed="${srsCap()===n}">${l}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Si se te acumulan más, se reparten solos en los días siguientes, empezando por tus bestias negras. Así nunca ves una montaña de pendientes.</p></div>
       <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
     const beasts = cards.map(k=>({id:+k,c:srsGet(k)})).filter(x=>x.c.l>=2).sort((a,b)=>b.c.l-a.c.l).slice(0,10);
-    if(beasts.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Tus bestias negras</div><div class="fails">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="f"><span><b>${esc(it[1])}</b> <span class="muted">· ${x.c.l} fallos</span></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
+    if(beasts.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Tus bestias negras</div><div class="fails">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="f"><span><b>${esc(it[1])}</b>${esSub(it)} <span class="muted">· ${x.c.l} fallos</span></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
   }
   h += statsHTML();
   return h;
@@ -822,7 +841,7 @@ function zonesHTML(it, vp){
 
 // ----- GEOMETRÍA DE CALLES -----
 let GEO=null, GEOP=null;
-function loadGeo(){ if(!GEOP) GEOP=fetch("geo.json").then(r=>r.ok?r.json():{}).then(g=>{GEO=g;return g;}).catch(()=>{GEO={};return GEO;}); return GEOP; }
+function loadGeo(){ if(!GEOP) GEOP=fetch("geo.json?v="+DATA_V).then(r=>r.ok?r.json():{}).then(g=>{GEO=g;return g;}).catch(()=>{GEO={};return GEO;}); return GEOP; }
 function streetLines(cv){ return GEO && cv!=null ? (GEO[cv]||null) : null; }
 function itemLL(it){ if(it[5]!=null) return [it[5],it[6]]; const L=streetLines(it[9]); if(L){ const ln=L[Math.floor(L.length/2)]; return ln[Math.floor(ln.length/2)]; } return null; }
 
@@ -909,8 +928,13 @@ function rnorm(s){
 function rmatch(a,b){ const x=rnorm(a), y=rnorm(b); if(!x||!y) return false; if(x===y) return true;
   if(x.length>=6 && y.length>=6 && (x.includes(y)||y.includes(x))) return true;
   const A=new Set(x.split(" ")), B=new Set(y.split(" ")); let n=0; for(const t of A) if(B.has(t)) n++; return n/Math.max(A.size,B.size) >= 0.6; }
+let RALIAS=null;
+function ralias(){ if(!RALIAS){ RALIAS=new Map(); for(const id of BYBLOCK.C||[]){ const it=ITEMS[id]; const names=[it[1]]; const es=esName(it); if(es) names.push(es); for(const nm of names){ const k=rnorm(nm); if(!k) continue; if(!RALIAS.has(k)) RALIAS.set(k,new Set()); names.forEach(x=>RALIAS.get(k).add(x)); } } } return RALIAS; }
+function aliasesOf(nm){ const set=ralias().get(rnorm(nm)); return set?[...set]:[nm]; }
+function rmatchX(a,b){ if(rmatch(a,b)) return true; const A=aliasesOf(a), B=aliasesOf(b); for(const x of A) for(const y of B) if(rmatch(x,y)) return true; return false; }
+function osmAlt(nm){ const al=aliasesOf(nm).filter(x=>!rmatch(x,nm)); return al.length?al[al.length-1]:""; }
 let RNAMES=null;
-function routeNames(){ if(!RNAMES){ const seen=new Set(); RNAMES=[]; for(const id of BYBLOCK.C||[]){ const nm=ITEMS[id][1]; const k=rnorm(nm); if(!seen.has(k)){ seen.add(k); RNAMES.push([nm,k]); } } } return RNAMES; }
+function routeNames(){ if(!RNAMES){ const seen=new Set(); RNAMES=[]; for(const id of BYBLOCK.C||[]){ const it=ITEMS[id]; const es=esName(it); for(const [nm,alt] of [[it[1],es],[es,it[1]]]){ if(!nm) continue; const k=rnorm(nm); if(!seen.has(k+"|"+alt)){ seen.add(k+"|"+alt); RNAMES.push([nm,k,alt]); } } } } return RNAMES; }
 function routePool(){ return activePool((BYBLOCK.C||[]).filter(id=>itemLL(ITEMS[id]) && ITEMS[id][4]>=0)); }
 function dailyRoute(ds){ const rnd=mulberry(hashStr("ruta|"+ds)()); const ex=flaggedSet(dayStart(ds)); const pool=(BYBLOCK.C||[]).filter(id=>ITEMS[id][5]!=null && ITEMS[id][4]>=0 && !ex.has(id)); return sample(pool,1,rnd)[0]; }
 async function osrm(from, to){
@@ -924,7 +948,7 @@ function newRoute(mode, list){ S.route={mode, list, i:0, picks:[], checked:false
 function prepRoute(){ const R=S.route; if(!R||R.i>=R.list.length) return; const q=R.list[R.i]; const it=ITEMS[q.id]; loadGeo().then(()=>{ const to=itemLL(it); if(!to){ R.err="Sin ubicación"; return; } R.pend=osrm(STATIONS[q.o].ll, to).catch(e=>{ throw e; }); R.pend.catch(()=>{}); }); }
 function routeScore(names, picks){
   const used=new Array(picks.length).fill(false), hit=names.map(()=>false);
-  names.forEach((nm,k)=>{ const j=picks.findIndex((p,pi)=>!used[pi] && rmatch(p,nm)); if(j>=0){ used[j]=true; hit[k]=true; } });
+  names.forEach((nm,k)=>{ const j=picks.findIndex((p,pi)=>!used[pi] && rmatchX(p,nm)); if(j>=0){ used[j]=true; hit[k]=true; } });
   const h=hit.filter(Boolean).length, x=used.filter(u=>!u).length;
   const nota=names.length? Math.max(0, Math.round(100*(h-0.5*x)/names.length)/10) : 0;
   return {hit, used, h, x, nota};
@@ -950,9 +974,9 @@ function drawPicks(){ const R=S.route, el=$("#rpicks"); if(!el) return;
   const c=$("#rcheck"); if(c) c.disabled=!R.picks.length;
 }
 function rsuggest(v){ const box=$("#rsug"); if(!box) return; const k=rnorm(v); if(k.length<2){ box.innerHTML=""; return; }
-  const out=[]; for(const [nm,nk] of routeNames()){ if(nk.startsWith(k)) out.push(nm); if(out.length>=8) break; }
-  if(out.length<8) for(const [nm,nk] of routeNames()){ if(!nk.startsWith(k) && nk.includes(k)) out.push(nm); if(out.length>=8) break; }
-  box.innerHTML = out.map(nm=>`<button class="rs" data-rs="${esc(nm)}">${esc(nm)}</button>`).join("") + `<button class="rs muted" data-rs="${esc(v)}">Añadir "${esc(v)}" tal cual</button>`;
+  const out=[]; for(const r of routeNames()){ if(r[1].startsWith(k)) out.push(r); if(out.length>=8) break; }
+  if(out.length<8) for(const r of routeNames()){ if(!r[1].startsWith(k) && r[1].includes(k)) out.push(r); if(out.length>=8) break; }
+  box.innerHTML = out.map(([nm,,alt])=>`<button class="rs" data-rs="${esc(nm)}">${esc(nm)}${alt?` <span class="muted">· ${esc(alt)}</span>`:""}</button>`).join("") + `<button class="rs muted" data-rs="${esc(v)}">Añadir "${esc(v)}" tal cual</button>`;
   box.querySelectorAll("[data-rs]").forEach(b=>b.addEventListener("click",()=>routeAdd(b.dataset.rs)));
 }
 let RMAP=null;
@@ -997,16 +1021,16 @@ function routeBoardHTML(ds, done){
 function routeQuestionHTML(){
   const R=S.route, q=R.list[R.i], it=ITEMS[q.id], st=STATIONS[q.o];
   let h=`<div class="qhead"><span class="eyebrow">${R.mode==="daily"?"Recorrido del día":"Práctica"} · ${R.i+1} de ${R.list.length}</span><span class="muted" style="font-size:13px">${q.role==="a"?"Parque que coopera":"Parque que actúa"}</span></div>
-  <div class="plaque"><span class="kind">Desde ${esc(st.n)}</span><span class="name">${esc(it[1])}</span><span class="info">${esc(it[2]||"")}</span></div>
+  <div class="plaque"><span class="kind">Desde ${esc(st.n)}</span><span class="name">${esc(bigName(it))}</span>${smallName(it)?`<span class="info">${esc(smallName(it))}</span>`:""}</div>
   <div id="rmap" class="rmapbox" role="img" aria-label="Mapa con el parque y la calle de destino"></div>`;
   if(!R.checked){
-    h+=`<div class="pick"><label class="eyebrow" for="rin">Tu recorrido</label><div id="rpicks" class="rpicks"></div><div class="rinwrap"><input class="input" id="rin" autocomplete="off" placeholder="Escribe una calle…"><div id="rsug" class="rsug"></div></div></div>
+    h+=`<div class="pick"><label class="eyebrow" for="rin">Tu recorrido</label><div id="rpicks" class="rpicks"></div><div class="rinwrap"><input class="input" id="rin" autocomplete="off" placeholder="Escribe una calle, en valenciano o castellano…"><div id="rsug" class="rsug"></div></div></div>
     ${R.err?`<div class="notice bad">${esc(R.err)}</div>`:""}
     <div class="row"><button class="btn" id="rcheck" ${R.picks.length&&!R.checking?"":"disabled"}>${R.checking?"Calculando ruta…":"Comprobar"}</button>${R.err?`<button class="btn ghost" id="rskip">Saltar</button>`:""}<button class="btn ghost small" id="rquit">Salir</button></div>`;
   } else {
     const r=R.res;
     h+=`<div class="verdict ${r.nota>=7?"v1":r.nota>=4?"v05":"v0"}"><span>${r.h} de ${r.names.length} calles${r.x?` · ${r.x} de más`:""} · ${r.km.toFixed(1)} km, ${Math.round(r.min)} min</span><span class="pts">${fmt(r.nota)}/10</span></div>
-    <div class="card"><div class="eyebrow" style="margin-bottom:6px">Ruta más rápida</div><div class="fails">${r.names.map((nm,k)=>`<div class="f"><span><span class="num muted">${k+1}.</span> ${esc(nm)}</span>${markHTML(r.hit[k]?1:0)}</div>`).join("")}</div>
+    <div class="card"><div class="eyebrow" style="margin-bottom:6px">Ruta más rápida</div><div class="fails">${r.names.map((nm,k)=>{ const alt=osmAlt(nm); return `<div class="f"><span><span class="num muted">${k+1}.</span> ${esc(nm)}${alt?` <span class="muted">· ${esc(alt)}</span>`:""}</span>${markHTML(r.hit[k]?1:0)}</div>`; }).join("")}</div>
     ${r.x?`<div class="eyebrow" style="margin:12px 0 6px">Te sobran</div><div class="fails">${R.picks.filter((p,k)=>!r.used[k]).map(p=>`<div class="f"><span style="text-decoration:line-through">${esc(p)}</span>${markHTML(0)}</div>`).join("")}</div>`:""}</div>
     <button class="btn" id="rnext">${R.i+1<R.list.length?"Siguiente":"Terminar"}</button>`;
   }
@@ -1055,7 +1079,7 @@ function quizHTML(){
   const got = q.results.reduce((s,r)=>s+r.sc,0);
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got)} pts</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
-    <div class="plaque"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[0]!=="P"&&(q.mode==="daily"||S.free.addr||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
+    <div class="plaque"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><span class="name">${esc(bigName(it))}</span>${it[0]==="C" ? (smallName(it)?`<span class="info">${esc(smallName(it))}</span>`:"") : (it[2]&&it[0]!=="P"&&(q.mode==="daily"||S.free.addr||q.answered)?`<span class="info">${esc(it[2])}</span>`:"")}</div>`;
   const btns = (row) => PARKS.map((_,i)=>{
     let cls = "", pressed = row==="multi"?q.sel.multi.has(i):q.sel[row]===i;
     if(q.answered){
@@ -1095,7 +1119,7 @@ function summaryHTML(){
     <div class="hero-score" style="margin-top:6px"><span class="num">${fmt(tot)}</span><span class="muted">/ ${q.ids.length}${q.mode==="daily"?" · "+fmtT(myDays()[today()]?.dy?.ms||0):""}</span></div>
     ${q.mode==="srs"?`<p class="muted" style="margin:8px 0 0">Mañana te tocan ${srsForecast(1)} tarjetas.</p>`:""}${q.mode==="duel"?duelSummary(q):""}
     <div class="row" style="margin-top:14px">${q.mode==="daily"?`<button class="btn" id="seeRank">Ver la clasificación</button>`:q.mode==="srs"?(srsDueCount()?`<button class="btn" id="again">Seguir repasando</button>`:""):q.mode==="duel"?"":`<button class="btn" id="again">Otra tanda</button>`}<button class="btn ghost" id="closeQ">Cerrar</button></div></div>`;
-  if(miss.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Para repasar</div><div class="fails">${miss.map(r=>{const it=ITEMS[r.id]; return `<div class="f"><span>${markHTML(r.sc)} <b>${esc(it[1])}</b></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
+  if(miss.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Para repasar</div><div class="fails">${miss.map(r=>{const it=ITEMS[r.id]; return `<div class="f"><span>${markHTML(r.sc)} <b>${esc(it[1])}</b>${esSub(it)}</span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
   return h;
 }
 function answer(){
@@ -1169,6 +1193,7 @@ function bindView(){
   document.querySelectorAll("[data-srsn]").forEach(b=>b.addEventListener("click",()=>{ SRS.cfg.n=+b.dataset.srsn; srsSave(); render(); }));
   document.querySelectorAll("[data-srsb]").forEach(b=>b.addEventListener("click",()=>{ const k=b.dataset.srsb; let a=(SRS.cfg.b||[]).slice(); a=a.includes(k)?a.filter(x=>x!==k):a.concat(k); if(!a.length) a=[k]; SRS.cfg.b=a; srsSave(); render(); }));
   drawMap();
+  document.querySelectorAll("[data-lang]").forEach(b=>b.addEventListener("click",()=>{ S.lang=b.dataset.lang; try{localStorage.setItem("cbl.lang",S.lang);}catch{} render(); }));
   on("#addrT", ()=>{ S.free.addr = !S.free.addr; render(); });
   on("#quitQ", ()=>{ const q=S.quiz; if(q.mode==="surv" && q.results.length && S.db && S.pid) mutateDay(today(), d=>addSurv(d, q.results.length)); S.quiz=null; render(); });
   on("#startSurv", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("surv", sample(activePool(BYBLOCK.C), 400, Math.random)); });
@@ -1267,7 +1292,7 @@ async function initDb(){
 }
 
 // ---------- boot ----------
-fetch("data.json").then(r=>r.json()).then(data=>{
+fetch("data.json?v="+DATA_V).then(r=>r.json()).then(data=>{
   ITEMS = data.items; BYBLOCK = {};
   ITEMS.forEach((it,i)=>{ (BYBLOCK[it[0]] ||= []).push(i); });
   render();
