@@ -60,8 +60,9 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 
 /* Tabs */
 nav.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
-nav.tabs .wrap{display:grid;grid-template-columns:repeat(4,1fr)}
-nav.tabs button{background:none;border:0;padding:12px 4px 10px;font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);border-bottom:3px solid transparent}
+nav.tabs .wrap{display:grid;grid-template-columns:repeat(5,1fr)}
+nav.tabs button{background:none;border:0;padding:12px 4px 10px;font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);border-bottom:3px solid transparent;min-width:0}
+@media (max-width:420px){nav.tabs button{font-size:14px;letter-spacing:.01em;padding-inline:2px}}
 nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--brand)}
 nav.tabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--brand);margin-left:4px;vertical-align:middle}
 
@@ -144,6 +145,33 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .pbar .track i{display:block;height:100%;border-radius:5px}
 .pbar .num{font-weight:700;text-align:right;font-size:17px}
 .pbar .sub{grid-column:2 / 4;font-size:12px}
+.zones{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.zones b{color:var(--ink)}
+.duelform{display:flex;flex-direction:column;gap:14px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.dlist{display:flex;flex-direction:column;margin-top:10px}
+.drow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line)}
+.drow:last-child{border-bottom:0}
+.dnames{display:flex;flex-direction:column;min-width:0}
+.dright{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dscore{font-family:var(--display);font-size:20px}
+.dscore b.win{color:var(--good)}
+.pill.lost{background:var(--bad-bg);color:var(--bad)}
+.flagrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:13px}
+.linkbtn{background:none;border:0;padding:0;color:var(--p0);font-weight:600;text-decoration:underline;font-size:13px}
+.rmapbox{height:260px;border-radius:10px;border:1px solid var(--line);z-index:0}
+.rpicks{display:flex;flex-wrap:wrap;gap:6px;min-height:28px;align-items:center}
+.rchip{display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:4px 6px 4px 10px;font-size:14px;font-weight:600}
+.rchip .num{font-size:13px;color:var(--muted)}
+.rchip button{border:0;background:var(--surface-2);border-radius:50%;width:22px;height:22px;line-height:1;font-size:15px}
+.rinwrap{position:relative}
+.rsug{display:flex;flex-direction:column;margin-top:4px;border-radius:8px;overflow:hidden}
+.rsug .rs{text-align:left;border:0;border-bottom:1px solid var(--line);background:var(--surface);padding:10px 12px;font-size:14px}
+.rsug .rs:last-child{border-bottom:0}
+.rtip{font-family:var(--display);font-weight:700}
+.salidas{border-top:1px solid var(--line);padding:8px 0}
+.salidas summary{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;cursor:pointer;list-style:none;font-size:14px}
+.salidas summary::-webkit-details-marker{display:none}
+.salidas ol{margin:8px 0 0;padding-left:22px;font-size:13px;display:flex;flex-direction:column;gap:4px}
 .big{font-family:var(--display);font-weight:700;font-size:22px}
 .scroll{overflow-x:auto}
 .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden}
@@ -201,6 +229,7 @@ const firebaseConfig = {
     const fdb = firebase.firestore();
     dbp = fdb.enablePersistence({synchronizeTabs:true}).catch(()=>{}).then(()=>fdb);
   }catch(e){ console.warn(e.message); }
+  window.LIGA_WEB = true;
   window.claude = { use: async name => name==="db" && dbp ? await dbp : null };
 })();
 </script>
@@ -213,6 +242,7 @@ const firebaseConfig = {
 <nav class="tabs" aria-label="Secciones"><div class="wrap" role="tablist">
   <button role="tab" id="t-hoy" aria-selected="true" data-v="hoy">Reto</button>
   <button role="tab" id="t-libre" aria-selected="false" data-v="libre">Entreno</button>
+  <button role="tab" id="t-rutas" aria-selected="false" data-v="rutas">Rutas</button>
   <button role="tab" id="t-rank" aria-selected="false" data-v="rank">Ranking</button>
   <button role="tab" id="t-fallos" aria-selected="false" data-v="fallos">Repaso</button>
 </div></nav>
@@ -255,10 +285,10 @@ const S = {
   view: (location.hash||"").replace("#","") || "hoy",
   db: null, user: null, uid: null, canWrite: true, writeError: null,
   pid: ls.get("cbl.pid"), players: {}, days: {}, subs: {}, loaded: false,
-  quiz: null, rankRange: "semana", rankSort: "pts", champ: null,
+  quiz: null, rankRange: "semana", rankSort: "pts", champ: null, duels: [], duelsById: {}, duelForm: null, flags: [], flagsLoaded: false, route: null, rOrig: "p",
   free: { blocks: new Set(["C"]), n: 10, parks: new Set([0,1,2,3,4]), addr: true },
 };
-if(!["hoy","libre","rank","fallos"].includes(S.view)) S.view = "hoy";
+if(!["hoy","libre","rutas","rank","fallos"].includes(S.view)) S.view = "hoy";
 
 // ---------- scoring ----------
 function scoreOf(item, sel){
@@ -269,17 +299,21 @@ function scoreOf(item, sel){
     if(hit===p.length && s.size===p.length) return 1;
     return hit>0 ? 0.5 : 0;
   }
-  if(a<0) return sel.p===p ? 1 : 0;
-  if(sel.p!==p) return 0;
-  return sel.a===a ? 1 : 0.5;
+  let best=0; for(const [pp,aa] of validPairs(item)) best=Math.max(best, scorePair(pp,aa,sel)); return best;
 }
+const ALT_MIN = 20;
+function validPairs(it){ const out=[[it[3],it[4]]]; for(const [p,a,pc] of (it[8]||[])) if(pc>=ALT_MIN && !(p===it[3]&&a===it[4])) out.push([p,a]); return out; }
+function scorePair(p,a,sel){ if(sel.p!==p) return 0; if(a<0) return 1; return sel.a===a?1:0.5; }
+function bestPair(it, sel){ let bp=[it[3],it[4]], best=-1; for(const pr of validPairs(it)){ const v=scorePair(pr[0],pr[1],sel); if(v>best){ best=v; bp=pr; } } return bp; }
 function dailyPlan(ds){
   const rnd = mulberry(hashStr("reto|"+ds)());
   let mix;
   if(ds < MIX_V2_FROM) mix = DAILY_MIX_V1;
   else { const ega = rnd() < 0.22; const hm = rnd() < 0.5 ? "H" : "M"; mix = ega ? [["C",6],[hm,1],["E",2],["G",1]] : [["C",7],[hm,1],["E",2]]; }
+  const ex = ds >= "2026-10-27" ? flaggedSet(dayStart(ds)) : null;
+  const pool = b => ex && ex.size ? (BYBLOCK[b]||[]).filter(i=>!ex.has(i)) : (BYBLOCK[b]||[]);
   const out = [];
-  for(const [b,n] of mix) out.push(...sample(BYBLOCK[b]||[], n, rnd));
+  for(const [b,n] of mix) out.push(...sample(pool(b), n, rnd));
   return {mix, ids: sample(out, out.length, rnd)};
 }
 const dailyIds = ds => dailyPlan(ds).ids;
@@ -366,7 +400,7 @@ function setView(v){
 }
 document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.v)));
 
-function quizHome(m){ return m==="daily"?"hoy":(m==="srs"||m==="fails")?"fallos":"libre"; }
+function quizHome(m){ return (m==="daily"||m==="duel")?"hoy":(m==="srs"||m==="fails")?"fallos":"libre"; }
 function render(){
   document.querySelectorAll("nav.tabs button").forEach(b=>{
     b.setAttribute("aria-selected", String(b.dataset.v===S.view));
@@ -385,10 +419,13 @@ function render(){
   if(S.quiz && quizHome(S.quiz.mode)===S.view) html += quizHTML();
   else if(S.view==="hoy") html += hoyHTML();
   else if(S.view==="libre") html += libreHTML();
+  else if(S.view==="rutas") html += rutasHTML();
   else if(S.view==="rank") html += rankHTML();
   else html += fallosHTML();
   main.innerHTML = `<section class="view">${html}</section>`;
   bindView();
+  if(S.view==="rutas") bindRoutes();
+  if(S.view==="fallos" && SRS.loaded && !S.quiz && srsSpread()) render();
 }
 
 function offlineNote(){
@@ -430,6 +467,7 @@ function hoyHTML(){
     const yw = ps.map(p=>({p,dy:S.days[p.id]?.[y]?.dy})).filter(r=>r.dy?.done).sort((a,b)=>(b.dy.pts-a.dy.pts)||(a.dy.ms-b.dy.ms));
     if(yw.length) h += `<p class="muted" style="margin:0;font-size:14px">Ayer ganó <b style="color:var(--ink)">${esc(yw[0].p.alias)}</b> con ${fmt(yw[0].dy.pts)} puntos en ${fmtT(yw[0].dy.ms)}.</p>`;
   }
+  h += duelsHTML();
   h += feedHTML();
   return h;
 }
@@ -442,6 +480,9 @@ function feedHTML(){
       if(doc.fr?.n>=30) ev.push({t:doc.u||0,pid:p.id,txt:`${ds===t?"lleva":"hizo"} <b>${doc.fr.n}</b> preguntas de entreno ${ds===t?"hoy":"el "+longDate(ds)}`});
     }
   }
+  for(const D of S.duels){ const w=duelWinner(D); if(!w) continue; const t=Math.max(D.ra.end||0,D.rb.end||0); if(t<Date.parse(from+"T00:00:00Z")) continue;
+    if(w==="tie") ev.push({t,pid:D.a,txt:`ha empatado un duelo con <b>${esc(aliasOf(D.b))}</b> (${fmt(D.ra.pts)}–${fmt(D.rb.pts)})`});
+    else { const l=w===D.a?D.b:D.a; ev.push({t,pid:w,txt:`ha ganado un duelo a <b>${esc(aliasOf(l))}</b> (${fmt(Math.max(D.ra.pts,D.rb.pts))}–${fmt(Math.min(D.ra.pts,D.rb.pts))})`}); } }
   ev.sort((a,b)=>b.t-a.t);
   if(!ev.length) return "";
   return `<div class="card"><h3 style="font-size:22px">Últimos movimientos</h3><div class="feed">${ev.slice(0,10).map(e=>`<div class="ev">${avatar(e.pid)}<span><b>${esc(aliasOf(e.pid))}</b> ${e.txt}</span><span class="muted t">${ago(e.t)}</span></div>`).join("")}</div></div>`;
@@ -479,6 +520,7 @@ function libreHTML(){
   const myBest = survBest(S.pid), top = survTop();
   h += `<div class="card spread"><div style="min-width:0;flex:1 1 260px"><h3 style="font-size:24px">Supervivencia</h3><p class="muted" style="margin:4px 0 0">Calles sin parar hasta el primer fallo. Medio acierto también elimina. Cada respuesta suma al entreno.</p><p style="margin:6px 0 0;font-size:14px">Tu récord: <b>${myBest}</b>${top?` · Récord de la liga: <b>${top.best}</b> (${esc(aliasOf(top.id))})`:""}</p></div><button class="btn" id="startSurv">Jugar</button></div>`;
   if(fr?.n) h += `<div class="card grid2"><div class="stat"><span class="eyebrow">Hoy en entreno</span><span class="num">${fmt(fr.pts)} pts</span></div><div class="stat"><span class="eyebrow">Preguntas</span><span class="num">${fr.n}</span></div><div class="stat"><span class="eyebrow">Acierto</span><span class="num">${Math.round(100*fr.pts/fr.n)} %</span></div></div>`;
+  h += flagsListHTML();
   return h;
 }
 function freePool(){
@@ -487,7 +529,7 @@ function freePool(){
     const p = ITEMS[id][3];
     if(Array.isArray(p) ? p.some(x=>f.parks.has(x)) : f.parks.has(p)) out.push(id);
   }
-  return out;
+  return activePool(out);
 }
 
 // ----- RANKING -----
@@ -532,7 +574,7 @@ function rankHTML(){
     else if(me && me===lead && rows[1] && me.pts>0) h += `<p style="margin:12px 0 0;font-size:14px">Vas primero, con ${fmt(me.pts-rows[1].pts)} puntos de ventaja sobre ${esc(rows[1].p.alias)}.</p>`;
   }
   h += `</div>`;
-  return h + recordsHTML();
+  return h + recordsHTML() + (window.LIGA_WEB && S.db ? `<div class="spread"><span class="muted" style="font-size:13px">Guarda de vez en cuando una copia de todo el historial de la liga.</span><button class="btn ghost small" id="backup">Descargar copia de seguridad</button></div>` : "");
 }
 function recordsHTML(){
   const ps = playerList(); if(!ps.length) return "";
@@ -541,8 +583,8 @@ function recordsHTML(){
   while(ws < cur){ const w = weekWinner(ws); if(w){ titles[w.id]=(titles[w.id]||0)+1; history.push({ws, ...w}); } ws = addDays(ws,7); }
   const iDone = !!myDays()[today()]?.dy?.done;
   const rows = ps.map(p=>{ let bd=null; const d=S.days[p.id]||{}; for(const ds in d){ const dy=d[ds].dy; if(dy?.done && (ds<today()||iDone||p.id===S.pid) && (!bd || dy.pts>bd.pts || (dy.pts===bd.pts && dy.ms<bd.ms))) bd={pts:dy.pts,ms:dy.ms||0}; } return {p, sv:survBest(p.id), bd, titles:titles[p.id]||0}; }).sort((a,b)=>b.titles-a.titles || b.sv-a.sv);
-  let h = `<div class="card"><h3 style="font-size:22px">Palmarés y récords</h3><div class="scroll" style="margin-top:8px"><table class="tbl"><thead><tr><th></th><th>Jugador</th><th title="Semanas ganadas">Títulos</th><th title="Mejor racha en Supervivencia">Superv.</th><th>Mejor reto</th></tr></thead><tbody>`;
-  for(const r of rows) h += `<tr class="${r.p.id===S.pid?"me":""}"><td></td><td>${whoHTML(r.p.id)}</td><td class="big">${r.titles}</td><td>${r.sv||"–"}</td><td>${r.bd?`${fmt(r.bd.pts)} · ${fmtT(r.bd.ms)}`:"–"}</td></tr>`;
+  let h = `<div class="card"><h3 style="font-size:22px">Palmarés y récords</h3><div class="scroll" style="margin-top:8px"><table class="tbl"><thead><tr><th></th><th>Jugador</th><th title="Semanas ganadas">Títulos</th><th title="Mejor racha en Supervivencia">Superv.</th><th>Mejor reto</th><th title="Duelos ganados">Duelos</th></tr></thead><tbody>`;
+  for(const r of rows) h += `<tr class="${r.p.id===S.pid?"me":""}"><td></td><td>${whoHTML(r.p.id)}</td><td class="big">${r.titles}</td><td>${r.sv||"–"}</td><td>${r.bd?`${fmt(r.bd.pts)} · ${fmtT(r.bd.ms)}`:"–"}</td><td>${duelsWon(r.p.id)}</td></tr>`;
   h += `</tbody></table></div>`;
   if(history.length) h += `<p class="muted" style="font-size:13px;margin:10px 0 0">Últimos campeones: ${history.slice(-5).reverse().map(x=>`semana del ${new Date(x.ws+"T12:00:00Z").toLocaleDateString("es-ES",{day:"numeric",month:"short",timeZone:"UTC"})}, ${esc(aliasOf(x.id))} (${fmt(x.pts)})`).join(" · ")}</p>`;
   else h += `<p class="muted" style="font-size:13px;margin:10px 0 0">Quien más puntos haga de lunes a domingo se lleva un título y luce la corona ♛ junto a su nombre toda la semana siguiente.</p>`;
@@ -567,8 +609,8 @@ function srsSubscribe(){
     const v = snap.exists ? snap.data() : null;
     if(v){ SRS.c={...(v.c||{})}; SRS.cfg={n:10,b:["C"],...(v.cfg||{})}; SRS.nd=v.nd||""; SRS.nn=v.nn||0; }
     const first = !SRS.loaded; SRS.loaded=true;
-    if(first) srsSeed();
-    if(!S.quiz) render();
+    if(first){ srsSeed(); srsSpread(); }
+    if(!S.quiz && !(S.route && S.view==="rutas")) render();
   }, e=>{ SRS.loaded=true; srsError(e); });
 }
 function srsSeed(){
@@ -597,21 +639,32 @@ function srsAnswer(id, sc, inRepaso){
   c.d = (!inRepaso && sc<1) ? t : t + c.iv;
   srsPut(id,c); srsSave();
 }
-function srsDue(){ const t=dnum(today()); const out=[]; for(const k in SRS.c){ const c=srsGet(k); if(c && c.d<=t) out.push([+k,c.d]); } out.sort((a,b)=>a[1]-b[1]); return out.map(x=>x[0]); }
+function srsDue(){ const t=dnum(today()); const out=[]; for(const k in SRS.c){ const c=srsGet(k); if(c && c.d<=t) out.push([+k,c]); } out.sort((a,b)=>(b[1].l-a[1].l)||(a[1].d-b[1].d)); return out.map(x=>x[0]); }
+function srsCap(){ const c=SRS.cfg.cap; return c===undefined ? 100 : c; }
+function srsSpread(){
+  const cap=srsCap(); if(!SRS.loaded || !cap) return false;
+  const due=srsDue(); if(due.length<=cap) return false;
+  const t=dnum(today()), load={};
+  for(const k in SRS.c){ const d=parseInt(SRS.c[k],10); if(d>t) load[d]=(load[d]||0)+1; }
+  let day=t+1;
+  for(const id of due.slice(cap)){ while((load[day]||0)>=cap) day++; const c=srsGet(id); c.d=day; srsPut(id,c); load[day]=(load[day]||0)+1; }
+  srsSave(); return true;
+}
 function srsDueCount(){ const t=dnum(today()); let n=0; for(const k in SRS.c){ const d=parseInt(SRS.c[k],10); if(d<=t) n++; } return n; }
 function srsNewLeft(){ const n=SRS.cfg.n||0; const used = SRS.nd===today()?SRS.nn:0; return Math.max(0,n-used); }
-function srsNewPick(k){ if(k<=0) return []; const pool=[]; for(const b of (SRS.cfg.b||["C"])) for(const id of BYBLOCK[b]||[]) if(!SRS.c[id]) pool.push(id); return sample(pool,k,Math.random); }
+function srsNewPick(k){ if(k<=0) return []; const pool=[]; for(const b of (SRS.cfg.b||["C"])) for(const id of BYBLOCK[b]||[]) if(!SRS.c[id]) pool.push(id); return sample(activePool(pool),k,Math.random); }
 function srsForecast(days){ const t=dnum(today()); let n=0; for(const k in SRS.c){ const d=parseInt(SRS.c[k],10); if(d===t+days) n++; } return n; }
 function startSrs(){
   if(!S.pid && S.db && S.canWrite) return askWho();
-  const due=srsDue().slice(0,300); const nw=srsNewPick(srsNewLeft());
+  srsSpread(); const cap=srsCap(); const due=cap?srsDue().slice(0,cap):srsDue(); const nw=srsNewPick(srsNewLeft());
   if(!due.length && !nw.length) return render();
   startQuiz("srs", due.concat(nw)); S.quiz.newSet=new Set(nw);
 }
 function recordStats(d, it, sel, sc){
   if(Array.isArray(it[3]) || sel.p==null) return;
-  d.cm = d.cm || Array(25).fill(0); d.cm[it[3]*5+sel.p]++;
-  if(it[4]>=0 && sel.p===it[3] && sel.a!=null){ d.ca = d.ca || Array(25).fill(0); d.ca[it[4]*5+sel.a]++; }
+  const vp=bestPair(it, sel);
+  d.cm = d.cm || Array(25).fill(0); d.cm[vp[0]*5+sel.p]++;
+  if(vp[1]>=0 && sel.p===vp[0] && sel.a!=null){ d.ca = d.ca || Array(25).fill(0); d.ca[vp[1]*5+sel.a]++; }
   d.bk = d.bk || {}; const b=(d.bk[it[0]]||[0,0]).slice(); b[0]++; b[1]+=sc; d.bk[it[0]]=b;
 }
 function fallosHTML(){
@@ -632,6 +685,7 @@ function fallosHTML(){
     const fc = Array.from({length:7},(_,i)=>srsForecast(i+1)); const mx=Math.max(1,...fc);
     h += `<div class="card"><div class="eyebrow" style="margin-bottom:10px">Próximos 7 días</div><div class="fc">${fc.map((n,i)=>{const ds=addDays(today(),i+1); const lab=new Date(ds+"T12:00:00Z").toLocaleDateString("es-ES",{weekday:"short",timeZone:"UTC"}).replace(".",""); return `<div class="fcol"><span class="num">${n}</span><i style="height:${Math.round(56*n/mx)+2}px"></i><span class="muted">${lab}</span></div>`;}).join("")}</div></div>`;
     h += `<div class="card" style="display:flex;flex-direction:column;gap:12px"><div><div class="eyebrow" style="margin-bottom:8px">Nuevas por día</div><div class="seg" role="group">${[0,10,20,30].map(n=>`<button data-srsn="${n}" aria-pressed="${(SRS.cfg.n||0)===n}">${n}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Tarjetas que aún no has visto y que entran en el repaso cada día, como las nuevas de Anki. Con 0 solo repasas tus fallos.</p></div>
+      <div><div class="eyebrow" style="margin-bottom:8px">Máximo de repasos al día</div><div class="seg" role="group">${[[50,"50"],[100,"100"],[150,"150"],[0,"Sin límite"]].map(([n,l])=>`<button data-srscap="${n}" aria-pressed="${srsCap()===n}">${l}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Si se te acumulan más, se reparten solos en los días siguientes, empezando por tus bestias negras. Así nunca ves una montaña de pendientes.</p></div>
       <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
     const beasts = cards.map(k=>({id:+k,c:srsGet(k)})).filter(x=>x.c.l>=2).sort((a,b)=>b.c.l-a.c.l).slice(0,10);
     if(beasts.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Tus bestias negras</div><div class="fails">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="f"><span><b>${esc(it[1])}</b> <span class="muted">· ${x.c.l} fallos</span></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
@@ -663,6 +717,325 @@ function statsHTML(){
   return h + `</div>`;
 }
 
+// ----- DUELOS -----
+const DUEL_MIX = {reto:"Como el reto", C:"Solo calles", todo:"De todo"};
+function duelIds(mix, n){
+  const rnd=Math.random, B=k=>activePool(BYBLOCK[k]||[]);
+  if(mix==="C") return sample(B("C"), n, rnd);
+  if(mix==="todo") return sample([].concat(B("C"),B("E"),B("M"),B("H"),B("G")), n, rnd);
+  const nE=Math.round(n*0.2), nHM=Math.round(n*0.1), nC=n-nE-nHM;
+  return sample([].concat(sample(B("C"),nC,rnd), sample(B("E"),nE,rnd), sample([].concat(B("H"),B("M")),nHM,rnd)), n, rnd);
+}
+function duelSide(D){ return D.a===S.pid?"ra":D.b===S.pid?"rb":null; }
+function duelWinner(D){ const A=D.ra, B=D.rb; if(!A?.done||!B?.done) return null; if(A.pts!==B.pts) return A.pts>B.pts?D.a:D.b; if((A.ms||0)!==(B.ms||0)) return (A.ms||0)<(B.ms||0)?D.a:D.b; return "tie"; }
+function duelsWon(pid){ return S.duels.filter(D=>duelWinner(D)===pid).length; }
+function duelsHTML(){
+  if(!S.db) return "";
+  const ps=playerList().filter(p=>p.id!==S.pid);
+  let h=`<div class="card"><div class="spread"><div style="flex:1 1 240px;min-width:0"><h3 style="font-size:24px">Duelos 1 vs 1</h3><p class="muted" style="margin:4px 0 0;font-size:14px">Las mismas preguntas para los dos. Gana quien más puntos haga y, si empatáis, quien tarde menos. Cada uno juega cuando quiera.</p></div>${S.pid&&ps.length?`<button class="btn small" id="duelNew">${S.duelForm?"Cancelar":"Retar"}</button>`:""}</div>`;
+  if(S.duelForm){ const f=S.duelForm;
+    h+=`<div class="duelform"><div><div class="eyebrow" style="margin-bottom:8px">Rival</div><div class="chips">${ps.map(p=>`<button class="chip" data-drival="${esc(p.id)}" aria-pressed="${f.rival===p.id}">${esc(p.alias)}</button>`).join("")}</div></div>
+    <div><div class="eyebrow" style="margin-bottom:8px">Preguntas</div><div class="seg" role="group">${[10,20,30].map(n=>`<button data-dn="${n}" aria-pressed="${f.n===n}">${n}</button>`).join("")}</div></div>
+    <div><div class="eyebrow" style="margin-bottom:8px">Qué entra</div><div class="seg" role="group">${Object.entries(DUEL_MIX).map(([k,l])=>`<button data-dmix="${k}" aria-pressed="${f.mix===k}">${l}</button>`).join("")}</div></div>
+    <div><button class="btn" id="duelGo" ${f.rival?"":"disabled"}>Lanzar el duelo</button></div></div>`; }
+  const mine=S.duels.filter(D=>D.a===S.pid||D.b===S.pid);
+  const others=S.duels.filter(D=>D.a!==S.pid&&D.b!==S.pid).slice(0,5);
+  if(mine.length) h+=`<div class="dlist">${mine.slice(0,10).map(duelRow).join("")}</div>`;
+  else if(!S.duelForm) h+=`<p class="muted" style="margin:10px 0 0;font-size:14px">Aún no tienes duelos. Reta a alguien.</p>`;
+  if(others.length) h+=`<div class="eyebrow" style="margin:14px 0 6px">Otros duelos</div><div class="dlist">${others.map(duelRow).join("")}</div>`;
+  return h+`</div>`;
+}
+function duelRow(D){
+  const side=duelSide(D), me=side?D[side]:null, oside=side==="ra"?"rb":"ra", rivalId=side?(side==="ra"?D.b:D.a):null, rv=side?D[oside]:null;
+  const w=duelWinner(D);
+  const names=`${esc(aliasOf(D.a))} <span class="muted">vs</span> ${esc(aliasOf(D.b))}`;
+  const meta=`${D.n} preg. · ${DUEL_MIX[D.mix]||""} · ${ago(D.c||0)}`;
+  let right="";
+  if(w){ right=`<span class="dscore"><b class="${w===D.a?"win":""}">${fmt(D.ra.pts)}</b> – <b class="${w===D.b?"win":""}">${fmt(D.rb.pts)}</b></span>`;
+    const res = w==="tie"?"Empate":side?(w===S.pid?"Has ganado":"Has perdido"):`Gana ${esc(aliasOf(w))}`;
+    right+=`<span class="pill ${side&&w===S.pid?"done":side&&w!=="tie"?"lost":""}">${res}</span>`;
+    if(side) right+=`<button class="btn ghost small" data-drematch="${esc(D.id)}">Revancha</button>`;
+  } else if(side && !me?.done){ right=`${rv?.done?`<span class="pill going">${esc(aliasOf(rivalId))} ya ha jugado</span>`:""}<button class="btn small" data-dplay="${esc(D.id)}">${me?.ans?.length?`Seguir ${me.ans.length}/${D.n}`:"Jugar"}</button>`; }
+  else if(side){ right=`<span class="muted" style="font-size:13px">Tu nota: ${fmt(me.pts)}. Falta ${esc(aliasOf(rivalId))}</span>`; }
+  else right=`<span class="pill">En juego</span>`;
+  return `<div class="drow"><div class="dnames"><span>${names}</span><span class="muted" style="font-size:12px">${meta}</span></div><div class="dright">${right}</div></div>`;
+}
+async function duelCreate(rival, n, mix){
+  const ids=duelIds(mix,n); const ref=S.db.collection("duels").doc();
+  const body={a:S.pid,b:rival,n:ids.length,mix,ids,c:Date.now()};
+  try{ await ref.set(body); }catch(e){ return duelError(e); }
+  S.duelForm=null; render();
+}
+function duelError(e){ try{console.error("Duelo",e);}catch{} S.writeError="No se ha podido guardar el duelo. En la web de GitHub, revisa que has pegado las reglas nuevas en Firebase (Firestore → Reglas)."; render(); }
+function duelPlay(id){
+  const D=S.duelsById[id]; if(!D) return; const side=duelSide(D); if(!side) return;
+  startQuiz("duel", D.ids.slice()); const q=S.quiz; q.duel=id; q.side=side;
+  const r=D[side]; if(r?.ans?.length){ q.i=Math.min(r.ans.length,q.ids.length); q.results=r.ans.map(x=>({id:x.i,sc:x.s})); }
+  render();
+}
+const duelQueue={};
+function duelSave(id, side){
+  const run = async()=>{ const D=S.duelsById[id]; if(!D) return; try{ await S.db.doc("duels/"+id).update({[side]: JSON.parse(JSON.stringify(D[side]))}); }catch(e){ duelError(e); } };
+  duelQueue[id] = (duelQueue[id]||Promise.resolve()).then(run);
+}
+function duelAnswer(q, id, sc, ms){
+  const D=S.duelsById[q.duel]; if(!D) return;
+  const r = D[q.side] ? D[q.side] : (D[q.side]={ans:[],pts:0,ms:0,done:false});
+  r.ans.push({i:id,s:sc,t:ms}); r.pts+=sc; r.ms+=ms;
+  if(r.ans.length>=q.ids.length){ r.done=true; r.end=Date.now(); }
+  duelSave(q.duel,q.side);
+}
+function duelSummary(q){
+  const D=S.duelsById[q.duel]; if(!D) return "";
+  const oside=q.side==="ra"?"rb":"ra", rid=q.side==="ra"?D.b:D.a, rv=D[oside], w=duelWinner(D);
+  if(w) return `<p style="margin:8px 0 0">${w==="tie"?"Empate":w===S.pid?"<b>Has ganado</b>":"<b>Has perdido</b>"} · ${esc(aliasOf(rid))} hizo ${fmt(rv.pts)} en ${fmtT(rv.ms||0)}.</p>`;
+  return `<p class="muted" style="margin:8px 0 0">Falta que juegue ${esc(aliasOf(rid))}. Lo verás en Duelos.</p>`;
+}
+function subscribeDuels(){
+  S.db.collection("duels").orderBy("c","desc").limit(60).onSnapshot(snap=>{
+    const old=S.duelsById, byId={}, list=[];
+    for(const d of snap.docs){ const v=d.data(); if(!v||!v.ids) continue; const D=JSON.parse(JSON.stringify(v)); D.id=d.id;
+      const o=old[d.id]; if(o) for(const sd of ["ra","rb"]) if((o[sd]?.ans?.length||0)>(D[sd]?.ans?.length||0)) D[sd]=o[sd];
+      byId[d.id]=D; list.push(D); }
+    S.duelsById=byId; S.duels=list;
+    if(!S.quiz && !(S.route && S.view==="rutas")) render();
+  }, ()=>{});
+}
+async function doBackup(){
+  const btn=$("#backup"); if(btn){ btn.disabled=true; btn.textContent="Preparando…"; }
+  try{
+    const out={fecha:new Date().toISOString(), players:{}, duels:[]};
+    const ps=await S.db.collection("players").get();
+    for(const p of ps.docs){ const v=p.data(); const days=await S.db.collection(`players/${p.id}/days`).get(); const srs=await S.db.doc(`players/${p.id}/srs/main`).get();
+      const dd={}; for(const d of days.docs) dd[d.id]=d.data();
+      out.players[p.id]={...v, days:dd, srs: srs.exists?srs.data():null}; }
+    const ds=await S.db.collection("duels").get(); out.duels=ds.docs.map(d=>({id:d.id,...d.data()}));
+    const blob=new Blob([JSON.stringify(out)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`liga-callejero-copia-${today()}.json`; document.body.appendChild(a); a.click(); a.remove();
+    if(btn) btn.textContent="Copia descargada";
+  }catch(e){ try{console.error(e);}catch{} if(btn){ btn.disabled=false; btn.textContent="No se pudo. Reintentar"; } }
+}
+function zonesHTML(it, vp){
+  const z=it[8]; if(!z) return "";
+  const alt = vp && (vp[0]!==it[3]||vp[1]!==it[4]);
+  return `<div class="zones"><b>Calle límite</b> · ${z.map(([p,a,pc])=>`${PSHORT[p]}${a>=0?"·"+PSHORT[a]:""} ${pc} %`).join(" / ")}${alt?` <span class="pill done">Te vale por ser calle límite</span>`:""}</div>`;
+}
+
+// ----- GEOMETRÍA DE CALLES -----
+let GEO=null, GEOP=null;
+function loadGeo(){ if(!GEOP) GEOP=fetch("geo.json").then(r=>r.ok?r.json():{}).then(g=>{GEO=g;return g;}).catch(()=>{GEO={};return GEO;}); return GEOP; }
+function streetLines(cv){ return GEO && cv!=null ? (GEO[cv]||null) : null; }
+function itemLL(it){ if(it[5]!=null) return [it[5],it[6]]; const L=streetLines(it[9]); if(L){ const ln=L[Math.floor(L.length/2)]; return ln[Math.floor(ln.length/2)]; } return null; }
+
+// ----- CALLES DESAPARECIDAS (marcas de los jugadores) -----
+const FLAG_MIN = 2;
+function flagActive(f, at){ return f.t < at && (!f.r || f.r >= at); }
+function flaggedSet(at){ const by={}; for(const f of S.flags){ if(flagActive(f,at)) (by[f.i]||(by[f.i]=new Set())).add(f.p); } const out=new Set(); for(const k in by) if(by[k].size>=FLAG_MIN) out.add(+k); return out; }
+function dayStart(ds){ const d=new Date(ds+"T00:00:00"); return d.getTime(); }
+function flagCount(id){ const s=new Set(); const now=Date.now()+1; for(const f of S.flags) if(f.i===id && flagActive(f,now)) s.add(f.p); return s; }
+function myFlag(id){ return S.flags.find(f=>f.i===id && f.p===S.pid) || null; }
+async function toggleFlag(id){
+  if(!S.db || !S.pid) return; const f=myFlag(id); const ref=S.db.doc(`flags/${id}_${S.pid}`);
+  const on = f && !f.r;
+  const body = on ? {i:id,p:S.pid,t:f.t,r:Date.now()} : {i:id,p:S.pid,t:Date.now()};
+  const idx=S.flags.indexOf(f); if(idx>=0) S.flags[idx]=body; else S.flags.push(body);
+  render();
+  try{ await ref.set(body); }catch(e){ try{console.error(e);}catch{} S.writeError="No se ha podido guardar la marca. En la web de GitHub, revisa que has pegado las reglas nuevas en Firebase."; render(); }
+}
+function flagHTML(it, id){
+  if(it[0]!=="C" || !S.db || !S.pid) return "";
+  const n=flagCount(id).size, mine=myFlag(id), on=mine && !mine.r;
+  return `<div class="flagrow"><button class="linkbtn" data-flag="${id}">${on?"Quitar mi marca de calle desaparecida":"¿Esta calle ya no existe?"}</button>${n?`<span class="muted">Marcada por ${n} ${n===1?"persona":"personas"}${n>=FLAG_MIN?" · ya no sale en preguntas nuevas":""}</span>`:""}</div>`;
+}
+function flagsListHTML(){
+  if(!S.flags.length) return "";
+  const now=Date.now()+1, by={}; for(const f of S.flags) if(flagActive(f,now)) (by[f.i]||(by[f.i]=new Set())).add(f.p);
+  const ids=Object.keys(by).map(Number); if(!ids.length) return "";
+  const out=ids.filter(i=>by[i].size>=FLAG_MIN), pend=ids.filter(i=>by[i].size<FLAG_MIN);
+  const row=(i,btn)=>`<div class="f"><span><b>${esc(ITEMS[i][1])}</b> <span class="muted">· ${[...by[i]].map(p=>esc(aliasOf(p))).join(", ")}</span></span>${btn}</div>`;
+  let h=`<div class="card"><div class="eyebrow" style="margin-bottom:6px">Calles eliminadas por el grupo</div><p class="muted" style="font-size:13px;margin:0 0 6px">Cuando ${FLAG_MIN} personas marcan una calle como desaparecida, deja de salir en el reto (desde el día siguiente), el entreno, los duelos y las nuevas del repaso. El historial no cambia. Si os equivocasteis, recupérala.</p>`;
+  h+= out.length ? `<div class="fails">${out.map(i=>row(i,`<button class="btn ghost small" data-unflag="${i}">Recuperar</button>`)).join("")}</div>` : `<p class="muted" style="font-size:14px;margin:0">Ninguna todavía.</p>`;
+  if(pend.length) h+=`<div class="eyebrow" style="margin:14px 0 6px">Con una marca (falta otra)</div><div class="fails">${pend.map(i=>row(i, by[i].has(S.pid)?`<button class="btn ghost small" data-flag="${i}">Quitar mi marca</button>`:`<button class="btn ghost small" data-flag="${i}">Marcar también</button>`)).join("")}</div>`;
+  return h+`</div>`;
+}
+async function recoverFlag(id){
+  if(!S.db) return; const now=Date.now(); const act=S.flags.filter(f=>f.i===id && flagActive(f,now+1));
+  for(const f of act){ f.r=now; }
+  render();
+  for(const f of act){ try{ await S.db.doc(`flags/${id}_${f.p}`).set({i:f.i,p:f.p,t:f.t,r:now}); }catch(e){ try{console.error(e);}catch{} } }
+}
+function activePool(ids){ const ex=flaggedSet(Date.now()+1); return ex.size ? ids.filter(i=>!ex.has(i)) : ids; }
+
+// ----- RECORRIDOS -----
+const STATIONS = [
+  {n:"Parque Norte", a:"Sale por C/ Daniel Balaciart", ll:[39.48088,-0.35528], r:[
+    "C/ Daniel Balaciart – C/ Dr. Vicente Zaragozá – Av. Cataluña – Pl. Vicent Enric i Tarancón – Av. Blasco Ibáñez…",
+    "C/ Daniel Balaciart – C/ Dr. Vicente Zaragozá – Av. Cataluña – Pl. Vicent Enric i Tarancón – Av. Aragón…",
+    "C/ Daniel Balaciart – C/ Dr. Vicente Zaragozá – Av. Cataluña – Av. Tarongers…",
+    "C/ Daniel Balaciart – C/ Dr. Vicente Zaragozá – Av. Cataluña – Av. Tarongers – C/ Luis Peixó – C/ Marino Blas de Lezo…",
+    "C/ Daniel Balaciart – C/ Dr. Vicente Zaragozá – Av. Cataluña – Av. Tarongers – Av. Ingeniero Fausto Elio…",
+    "C/ Daniel Balaciart – C/ Dr. Vicente Zaragozá – Av. Primado Reig…",
+    "C/ Daniel Balaciart – Av. Primado Reig – Av. Cataluña…"]},
+  {n:"Parque Central (Sur)", a:"Sale por C/ Bombero Ramón Duart", ll:[39.45184,-0.36483], r:[
+    "C/ Bombero Ramón Duart – Av. Hermanos Maristas – Av. Ausiàs March – Av. Fernando Abril Martorell…",
+    "C/ Bombero Ramón Duart – Av. Antonio Ferrandis – Av. Fernando Abril Martorell…",
+    "C/ Bombero Ramón Duart – Av. Hermanos Maristas – Av. Instituto Obrero Valenciano – Pte. Monteolivete…",
+    "C/ Bombero Ramón Duart – Av. Hermanos Maristas – Av. Instituto Obrero Valenciano – Av. Profesor López Piñero…",
+    "C/ Bombero Ramón Duart – Av. de la Plata – Pl. Pirotècnia Valenciana – Av. Profesor López Piñero…",
+    "C/ Bombero Ramón Duart – Av. de la Plata – Pl. Pirotècnia Valenciana – C/ Alcalde Reig – Av. Jacinto Benavente…",
+    "C/ Bombero Ramón Duart – Av. de la Plata – Av. Dr. Waksman – Pl. Manuel Sanchis Guarner – Pte. Giorgeta – Av. Giorgeta – Av. Pérez Galdós…",
+    "C/ Bombero Ramón Duart – Av. de la Plata – Av. Dr. Waksman – Pl. Manuel Sanchis Guarner – Pte. Giorgeta – C/ San Vicente…",
+    "C/ Bombero Ramón Duart – Av. de la Plata – C/ Zapadores – C/ Maestro Aguilar – Pl. Barón de Cortés – C/ Consulado del Mar – Pl. Dr. Landete – C/ Ruzafa"]},
+  {n:"Parque Oeste", a:"Sale por C/ Músico Ayllón", ll:[39.4664,-0.401], r:[
+    "C/ Músico Ayllón – Av. Tres Cruces – Av. del Cid – C/ San José de Calasanz – Pl. Obispo Amigó – C/ San Francisco de Borja – C/ Pintor Benedito – Pl. de España…",
+    "C/ Miguel Paredes – C/ José Maestre – C/ Llombai – C/ José Maestre – Av. Tres Forques…",
+    "C/ Músico Ayllón – Av. Tres Cruces – Av. Archiduque Carlos…",
+    "C/ Músico Ayllón – Av. Tres Cruces – C/ Campos Crespo – C/ Fontanares…",
+    "C/ Músico Ayllón – Av. Tres Cruces – Av. Gaspar Aguilar…",
+    "C/ Músico Ayllón – Av. Tres Cruces – Av. Dr. Tomás Sala…"]},
+  {n:"Parque Campanar", a:"Sale por C/ Antoni Reig i Ventura", ll:[39.48274,-0.40573], r:[
+    "C/ Antoni Reig i Ventura – C/ Josep Alminyana i Vallés – Av. Pío Baroja – Av. Maestro Rodrigo – CV-30…",
+    "C/ Antoni Reig i Ventura – C/ Josep Alminyana i Vallés – Av. Pío Baroja – C/ de la Safor…",
+    "C/ Antoni Reig i Ventura – C/ Josep Alminyana i Vallés – C/ José Sanchis – Av. Maestro Rodrigo – Av. General Avilés…",
+    "C/ Antoni Reig i Ventura – C/ Josep Alminyana i Vallés – C/ José Sanchis – Av. Maestro Rodrigo – Pte. de Campanar – Av. Pérez Galdós…",
+    "C/ Antoni Reig i Ventura – C/ Arturo Ballester – Av. General Avilés – Av. Pío Baroja – Pte. Nou d’Octubre…"]},
+  {n:"Parque Saler/Devesa", a:"CV-500, km 8,3", ll:[39.40465,-0.33796], r:["Av. de los Pinares – CV-500"]}
+];
+function rnorm(s){
+  s=String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toUpperCase().replace(/\(.*?\)/g," ").replace(/[^A-Z0-9 ]/g," ").replace(/\s+/g," ").trim();
+  s=s.replace(/^(C|CL|CALLE|CARRER|AV|AVDA|AVENIDA|AVINGUDA|PL|PLAZA|PLACA|PG|PASSEIG|PASEO|PS|CAMI VELL|CAMINO VIEJO|CAMI NOU|CAMI|CAMINO|GV|GRAN VIA|RONDA|PONT|PUENTE|CTRA|CARRETERA|BULEVARD|BULEVAR|TRAVESSIA|TRAVESSERA|PASSATGE|ENTD|ENTRADOR|SENDA|PTDA|PARTIDA|GLORIETA|CARRERA|CRA)\s+/,"");
+  s=s.replace(/^(DE LA|DE LES|DE LOS|DE LAS|DEL|DELS|DE|D|LA|EL|LES|LOS|LAS|L)\s+/,"");
+  return s;
+}
+function rmatch(a,b){ const x=rnorm(a), y=rnorm(b); if(!x||!y) return false; if(x===y) return true;
+  if(x.length>=6 && y.length>=6 && (x.includes(y)||y.includes(x))) return true;
+  const A=new Set(x.split(" ")), B=new Set(y.split(" ")); let n=0; for(const t of A) if(B.has(t)) n++; return n/Math.max(A.size,B.size) >= 0.6; }
+let RNAMES=null;
+function routeNames(){ if(!RNAMES){ const seen=new Set(); RNAMES=[]; for(const id of BYBLOCK.C||[]){ const nm=ITEMS[id][1]; const k=rnorm(nm); if(!seen.has(k)){ seen.add(k); RNAMES.push([nm,k]); } } } return RNAMES; }
+function routePool(){ return activePool((BYBLOCK.C||[]).filter(id=>itemLL(ITEMS[id]) && ITEMS[id][4]>=0)); }
+function dailyRoute(ds){ const rnd=mulberry(hashStr("ruta|"+ds)()); const ex=flaggedSet(dayStart(ds)); const pool=(BYBLOCK.C||[]).filter(id=>ITEMS[id][5]!=null && ITEMS[id][4]>=0 && !ex.has(id)); return sample(pool,1,rnd)[0]; }
+async function osrm(from, to){
+  const url=`https://router.project-osrm.org/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=full&geometries=geojson&steps=true`;
+  const r=await fetch(url); if(!r.ok) throw new Error("http "+r.status); const j=await r.json(); if(j.code!=="Ok"||!j.routes?.length) throw new Error(j.code||"sin ruta");
+  const rt=j.routes[0]; const names=[];
+  for(const st of rt.legs[0].steps){ const nm=(st.name||"").trim(); if(!nm) continue; if(names.length && rmatch(names[names.length-1],nm)) continue; names.push(nm); }
+  return {names, line: rt.geometry.coordinates.map(([lo,la])=>[la,lo]), km: rt.distance/1000, min: rt.duration/60};
+}
+function newRoute(mode, list){ S.route={mode, list, i:0, picks:[], checked:false, res:null, err:null, pend:null}; prepRoute(); render(); }
+function prepRoute(){ const R=S.route; if(!R||R.i>=R.list.length) return; const q=R.list[R.i]; const it=ITEMS[q.id]; loadGeo().then(()=>{ const to=itemLL(it); if(!to){ R.err="Sin ubicación"; return; } R.pend=osrm(STATIONS[q.o].ll, to).catch(e=>{ throw e; }); R.pend.catch(()=>{}); }); }
+function routeScore(names, picks){
+  const used=new Array(picks.length).fill(false), hit=names.map(()=>false);
+  names.forEach((nm,k)=>{ const j=picks.findIndex((p,pi)=>!used[pi] && rmatch(p,nm)); if(j>=0){ used[j]=true; hit[k]=true; } });
+  const h=hit.filter(Boolean).length, x=used.filter(u=>!u).length;
+  const nota=names.length? Math.max(0, Math.round(100*(h-0.5*x)/names.length)/10) : 0;
+  return {hit, used, h, x, nota};
+}
+async function checkRoute(){
+  const R=S.route; if(!R||R.checked) return; R.checking=true; render();
+  try{ if(!R.pend) await loadGeo(); const res=await R.pend; R.res={...res, ...routeScore(res.names, R.picks)}; R.checked=true; }
+  catch(e){ R.err="No se ha podido calcular la ruta ahora mismo (el servicio de rutas no responde). Prueba en un rato."; }
+  R.checking=false;
+  if(R.checked && S.db && S.pid){ const q=R.list[R.i]; const nota=R.res.nota;
+    mutateDay(today(), d=>{
+      if(R.mode==="daily"){ d.rd=d.rd||{ans:[],pts:0,done:false}; if(d.rd.ans.length<R.list.length){ d.rd.ans.push({i:q.id,o:q.o,n:R.res.names.length,h:R.res.h,x:R.res.x,s:nota}); d.rd.pts=Math.round(10*d.rd.ans.reduce((a,b)=>a+b.s,0)/d.rd.ans.length)/10; if(d.rd.ans.length>=R.list.length){ d.rd.done=true; d.rd.end=Date.now(); } } }
+      else { d.rp=d.rp||{n:0,pts:0}; d.rp.n++; d.rp.pts=Math.round(10*(d.rp.pts+nota))/10; }
+    });
+  }
+  render();
+}
+function routeNext(){ const R=S.route; R.i++; R.picks=[]; R.checked=false; R.res=null; R.err=null; R.pend=null; if(R.i<R.list.length) prepRoute(); render(); }
+function routeAdd(txt){ const R=S.route; if(!R||R.checked) return; txt=String(txt||"").trim(); if(!txt) return; R.picks.push(txt); const inp=$("#rin"); if(inp){ inp.value=""; } drawPicks(); const s=$("#rsug"); if(s) s.innerHTML=""; if(inp) inp.focus(); }
+function drawPicks(){ const R=S.route, el=$("#rpicks"); if(!el) return;
+  el.innerHTML = R.picks.length ? R.picks.map((p,k)=>`<span class="rchip"><span class="num">${k+1}</span>${esc(p)}<button aria-label="Quitar" data-rdel="${k}">×</button></span>`).join("") : `<span class="muted" style="font-size:13px">Añade las calles en orden, desde el parque hasta el destino.</span>`;
+  el.querySelectorAll("[data-rdel]").forEach(b=>b.addEventListener("click",()=>{ R.picks.splice(+b.dataset.rdel,1); drawPicks(); }));
+  const c=$("#rcheck"); if(c) c.disabled=!R.picks.length;
+}
+function rsuggest(v){ const box=$("#rsug"); if(!box) return; const k=rnorm(v); if(k.length<2){ box.innerHTML=""; return; }
+  const out=[]; for(const [nm,nk] of routeNames()){ if(nk.startsWith(k)) out.push(nm); if(out.length>=8) break; }
+  if(out.length<8) for(const [nm,nk] of routeNames()){ if(!nk.startsWith(k) && nk.includes(k)) out.push(nm); if(out.length>=8) break; }
+  box.innerHTML = out.map(nm=>`<button class="rs" data-rs="${esc(nm)}">${esc(nm)}</button>`).join("") + `<button class="rs muted" data-rs="${esc(v)}">Añadir "${esc(v)}" tal cual</button>`;
+  box.querySelectorAll("[data-rs]").forEach(b=>b.addEventListener("click",()=>routeAdd(b.dataset.rs)));
+}
+let RMAP=null;
+function drawRouteMap(){
+  if(RMAP){ try{RMAP.remove();}catch{} RMAP=null; }
+  const el=$("#rmap"); const R=S.route; if(!el||!window.L||!R||R.i>=R.list.length) return;
+  const q=R.list[R.i], it=ITEMS[q.id], st=STATIONS[q.o];
+  RMAP=L.map(el,{scrollWheelZoom:false});
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(RMAP);
+  const pts=[st.ll];
+  L.circleMarker(st.ll,{radius:9,color:"#fff",weight:3,fillColor:"#15212C",fillOpacity:1}).addTo(RMAP).bindTooltip(st.n,{permanent:true,direction:"top",className:"rtip"});
+  loadGeo().then(()=>{ if(!RMAP) return; const lines=streetLines(it[9]); const dest=itemLL(it);
+    if(lines) lines.forEach(l=>{ L.polyline(l,{color:"#C42A1C",weight:7,opacity:.9}).addTo(RMAP); pts.push(...l); });
+    if(dest){ L.circleMarker(dest,{radius:9,color:"#fff",weight:3,fillColor:"#C42A1C",fillOpacity:1}).addTo(RMAP); pts.push(dest); }
+    if(R.checked && R.res){ L.polyline(R.res.line,{color:"#2B63C6",weight:5,opacity:.85}).addTo(RMAP); pts.push(...R.res.line); }
+    RMAP.fitBounds(L.latLngBounds(pts),{padding:[24,24]});
+  });
+}
+function rutasHTML(){
+  let h=offlineNote();
+  const R=S.route;
+  if(!window.L) return h+`<div class="card"><h2 style="font-size:30px">Recorridos</h2><p class="muted">Los recorridos necesitan el mapa y el cálculo de rutas, que solo funcionan en la web de GitHub.</p></div>`;
+  if(R && R.i<R.list.length) return h+routeQuestionHTML();
+  if(R && R.i>=R.list.length){ h+=routeSummaryHTML(); }
+  const ds=today(), mine=myDays()[ds]?.rd, done=!!mine?.done;
+  h+=`<div class="card"><div class="eyebrow">${esc(longDate(ds))}</div><div class="spread" style="margin-top:6px"><div style="flex:1 1 260px;min-width:0"><h2 style="font-size:30px">Recorrido del día</h2><p class="muted" style="margin:4px 0 0">La misma calle para todos: el recorrido desde el parque que actúa y desde el que coopera. Escribe las calles por orden. Cada calle de la ruta que aciertes suma; cada calle que sobre resta medio. Nota sobre 10.</p></div>${done?`<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ 10</span></div>`:`<button class="btn" id="rDaily">${mine?.ans?.length?"Seguir":"Empezar"}</button>`}</div></div>`;
+  h+=routeBoardHTML(ds, done);
+  h+=`<div class="card"><h3 style="font-size:24px">Practicar recorridos</h3><p class="muted" style="margin:4px 0 12px;font-size:14px">Una calle al azar y el recorrido desde su parque. No cuenta para la liga.</p><div class="seg" role="group">${[["p","Parque que actúa"],["a","Parque que coopera"],["b","Los dos"]].map(([k,l])=>`<button data-rorig="${k}" aria-pressed="${(S.rOrig||"p")===k}">${l}</button>`).join("")}</div><div style="margin-top:12px"><button class="btn" id="rPractice">Nuevo recorrido</button></div></div>`;
+  h+=`<div class="card"><div class="eyebrow" style="margin-bottom:4px">Salidas habituales (apuntes de la academia)</div><p class="muted" style="font-size:13px;margin:0 0 8px">Cada recorrido empieza en la calle por la que sale el parque. Toca un parque para ver sus salidas.</p>${STATIONS.map((s,i)=>`<details class="salidas"><summary><span class="ans" style="--pc:var(--p${i})"><i></i>${esc(s.n)}</span><span class="muted">${esc(s.a)}</span></summary><ol>${s.r.map(x=>`<li>${esc(x)}</li>`).join("")}</ol></details>`).join("")}<p class="muted" style="font-size:12px;margin:10px 0 0">La ruta que se corrige se calcula con OpenStreetMap (camino más rápido en coche). Alguna vez puede no coincidir con Google Maps ni con estas salidas.</p></div>`;
+  return h;
+}
+function routeBoardHTML(ds, done){
+  const ps=playerList(); if(!ps.length) return "";
+  const ws=weekStart(ds);
+  const rows=ps.map(p=>{ const d=S.days[p.id]||{}; let wk=0; for(const k in d) if(k>=ws&&k<=ds&&d[k].rd?.done) wk+=d[k].rd.pts; const rd=d[ds]?.rd; let pr=0; for(const k in d) if(k>=ws&&k<=ds) pr+=d[k].rp?.n||0; return {p,rd,wk,pr}; })
+    .sort((a,b)=>(!!b.rd?.done-!!a.rd?.done)||((b.rd?.pts||0)-(a.rd?.pts||0))||(b.wk-a.wk));
+  let h=`<div class="card"><h3 style="font-size:22px">Clasificación de recorridos</h3><div class="scroll" style="margin-top:8px"><table class="tbl"><thead><tr><th>#</th><th>Jugador</th><th>Hoy</th><th>Semana</th><th title="Recorridos de práctica esta semana">Práctica</th></tr></thead><tbody>`;
+  let pos=0; for(const r of rows){ const fin=r.rd?.done; if(fin) pos++;
+    h+=`<tr class="${r.p.id===S.pid?"me":""}"><td class="pos ${fin&&pos===1?"p1":""}">${fin?pos:"–"}</td><td>${whoHTML(r.p.id)}</td><td class="big">${fin?((done||r.p.id===S.pid)?fmt(r.rd.pts):"<span class='pill done'>Hecho</span>"):"<span class='pill'>Pendiente</span>"}</td><td>${fmt(r.wk)}</td><td>${r.pr}</td></tr>`; }
+  return h+`</tbody></table></div>${done?"":`<p class="muted" style="font-size:13px;margin:10px 0 0">Las notas de hoy se ven cuando hagas el tuyo.</p>`}</div>`;
+}
+function routeQuestionHTML(){
+  const R=S.route, q=R.list[R.i], it=ITEMS[q.id], st=STATIONS[q.o];
+  let h=`<div class="qhead"><span class="eyebrow">${R.mode==="daily"?"Recorrido del día":"Práctica"} · ${R.i+1} de ${R.list.length}</span><span class="muted" style="font-size:13px">${q.role==="a"?"Parque que coopera":"Parque que actúa"}</span></div>
+  <div class="plaque"><span class="kind">Desde ${esc(st.n)}</span><span class="name">${esc(it[1])}</span><span class="info">${esc(it[2]||"")}</span></div>
+  <div id="rmap" class="rmapbox" role="img" aria-label="Mapa con el parque y la calle de destino"></div>`;
+  if(!R.checked){
+    h+=`<div class="pick"><label class="eyebrow" for="rin">Tu recorrido</label><div id="rpicks" class="rpicks"></div><div class="rinwrap"><input class="input" id="rin" autocomplete="off" placeholder="Escribe una calle…"><div id="rsug" class="rsug"></div></div></div>
+    ${R.err?`<div class="notice bad">${esc(R.err)}</div>`:""}
+    <div class="row"><button class="btn" id="rcheck" ${R.picks.length&&!R.checking?"":"disabled"}>${R.checking?"Calculando ruta…":"Comprobar"}</button>${R.err?`<button class="btn ghost" id="rskip">Saltar</button>`:""}<button class="btn ghost small" id="rquit">Salir</button></div>`;
+  } else {
+    const r=R.res;
+    h+=`<div class="verdict ${r.nota>=7?"v1":r.nota>=4?"v05":"v0"}"><span>${r.h} de ${r.names.length} calles${r.x?` · ${r.x} de más`:""} · ${r.km.toFixed(1)} km, ${Math.round(r.min)} min</span><span class="pts">${fmt(r.nota)}/10</span></div>
+    <div class="card"><div class="eyebrow" style="margin-bottom:6px">Ruta más rápida</div><div class="fails">${r.names.map((nm,k)=>`<div class="f"><span><span class="num muted">${k+1}.</span> ${esc(nm)}</span>${markHTML(r.hit[k]?1:0)}</div>`).join("")}</div>
+    ${r.x?`<div class="eyebrow" style="margin:12px 0 6px">Te sobran</div><div class="fails">${R.picks.filter((p,k)=>!r.used[k]).map(p=>`<div class="f"><span style="text-decoration:line-through">${esc(p)}</span>${markHTML(0)}</div>`).join("")}</div>`:""}</div>
+    <button class="btn" id="rnext">${R.i+1<R.list.length?"Siguiente":"Terminar"}</button>`;
+  }
+  return h;
+}
+function routeSummaryHTML(){
+  const R=S.route; if(R.mode!=="daily") { S.route=null; return ""; }
+  S.route=null; return "";
+}
+function startDailyRoute(){
+  if(!S.pid && S.db && S.canWrite) return askWho();
+  const ds=today(), id=dailyRoute(ds); if(id==null) return; const it=ITEMS[id];
+  const list=[{id,o:it[3],role:"p"},{id,o:it[4],role:"a"}];
+  const r=newRoute("daily", list); const mine=myDays()[ds]?.rd; if(mine?.ans?.length){ S.route.i=Math.min(mine.ans.length, list.length); if(S.route.i<list.length) prepRoute(); render(); }
+}
+function startPracticeRoute(){
+  const pool=routePool(); const id=sample(pool,1,Math.random)[0]; const it=ITEMS[id]; const o=S.rOrig||"p";
+  const list = o==="b" ? [{id,o:it[3],role:"p"},{id,o:it[4],role:"a"}] : [{id,o:o==="a"?it[4]:it[3],role:o}];
+  newRoute("free", list);
+}
+function bindRoutes(){
+  const on=(sel,fn)=>{ const el=$(sel); if(el) el.addEventListener("click",fn); };
+  on("#rDaily", startDailyRoute); on("#rPractice", startPracticeRoute);
+  document.querySelectorAll("[data-rorig]").forEach(b=>b.addEventListener("click",()=>{ S.rOrig=b.dataset.rorig; render(); }));
+  on("#rcheck", checkRoute); on("#rnext", routeNext); on("#rskip", routeNext); on("#rquit", ()=>{ S.route=null; render(); });
+  const inp=$("#rin"); if(inp){ inp.addEventListener("input",()=>rsuggest(inp.value)); inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); const f=$("#rsug [data-rs]"); routeAdd(f?f.dataset.rs:inp.value); } }); }
+  drawPicks(); drawRouteMap();
+}
+
 // ----- QUIZ -----
 function startQuiz(mode, ids){
   S.quiz = {mode, ids, i:0, sel:{p:null,a:null,multi:new Set()}, answered:false, results:[], seen:new Set(), req:new Set(), newSet:new Set(), t0:performance.now(), prev: mode==="surv"?survBest(S.pid):0};
@@ -678,7 +1051,7 @@ function quizHTML(){
   if(q.i>=q.ids.length) return summaryHTML();
   const id = q.ids[q.i], it = ITEMS[id];
   const multi = Array.isArray(it[3]), hasA = !multi && it[4]>=0;
-  const title = q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="srs"?"Repaso":q.mode==="surv"?"Supervivencia":"Entreno libre";
+  const title = q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="srs"?"Repaso":q.mode==="duel"?"Duelo 1 vs 1":q.mode==="surv"?"Supervivencia":"Entreno libre";
   const got = q.results.reduce((s,r)=>s+r.sc,0);
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got)} pts</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
@@ -686,7 +1059,7 @@ function quizHTML(){
   const btns = (row) => PARKS.map((_,i)=>{
     let cls = "", pressed = row==="multi"?q.sel.multi.has(i):q.sel[row]===i;
     if(q.answered){
-      const right = row==="multi"?it[3].includes(i):row==="p"?it[3]===i:it[4]===i;
+      const vp=q.vp||[it[3],it[4]]; const right = row==="multi"?it[3].includes(i):row==="p"?vp[0]===i:vp[1]===i;
       if(right) cls="ok"; else if(pressed) cls="ko";
     }
     return `<button class="park ${cls}" data-row="${row}" data-i="${i}" aria-pressed="${pressed}" style="--pc:var(--p${i})" ${q.answered?"disabled":""}><i></i>${PSHORT[i]}<span class="k">${i+1}</span></button>`;
@@ -702,10 +1075,12 @@ function quizHTML(){
     const sc = q.results[q.results.length-1].sc;
     const v = sc===1?"v1":sc===0.5?"v05":"v0";
     h += `<div class="verdict ${v}" role="status"><span>${sc===1?"Correcto":sc===0.5?"Medio acierto":"Fallo"} · ${ansHTML(it)}</span><span class="pts">+${fmt(sc)}</span></div>
+      ${zonesHTML(it,q.vp)}
+      ${flagHTML(it,id)}
       ${mapHTML(it)}
       <button class="btn" id="nextQ">${(q.mode==="surv"?sc===1:q.i+1<q.ids.length)?"Siguiente":"Ver resultado"}</button>`;
   }
-  if(!q.answered && q.mode!=="daily") h += `<button class="btn ghost small" id="quitQ" style="align-self:flex-start">${q.mode==="surv"?"Plantarse y guardar la racha":q.mode==="srs"?"Dejar el repaso (se guarda)":"Dejar la tanda"}</button>`;
+  if(!q.answered && q.mode!=="daily") h += `<button class="btn ghost small" id="quitQ" style="align-self:flex-start">${q.mode==="surv"?"Plantarse y guardar la racha":q.mode==="srs"?"Dejar el repaso (se guarda)":q.mode==="duel"?"Dejar el duelo (se guarda)":"Dejar la tanda"}</button>`;
   return h;
 }
 function summaryHTML(){
@@ -716,17 +1091,18 @@ function summaryHTML(){
     <div class="row" style="margin-top:14px"><button class="btn" id="again">Otra vez</button><button class="btn ghost" id="closeQ">Cerrar</button></div></div>
     ${last&&last.sc<1?`<div class="card"><div class="eyebrow" style="margin-bottom:6px">Te ha eliminado</div><div class="fails"><div class="f"><span>${markHTML(last.sc)} <b>${esc(ITEMS[last.id][1])}</b></span>${ansHTML(ITEMS[last.id])}</div></div></div>`:""}`; }
   const miss = q.results.filter(r=>r.sc<1);
-  let h = `<div class="card"><div class="eyebrow">${q.mode==="daily"?"Reto del día terminado":q.mode==="srs"?"Repaso terminado":"Tanda terminada"}</div>
+  let h = `<div class="card"><div class="eyebrow">${q.mode==="daily"?"Reto del día terminado":q.mode==="srs"?"Repaso terminado":q.mode==="duel"?"Duelo terminado":"Tanda terminada"}</div>
     <div class="hero-score" style="margin-top:6px"><span class="num">${fmt(tot)}</span><span class="muted">/ ${q.ids.length}${q.mode==="daily"?" · "+fmtT(myDays()[today()]?.dy?.ms||0):""}</span></div>
-    ${q.mode==="srs"?`<p class="muted" style="margin:8px 0 0">Mañana te tocan ${srsForecast(1)} tarjetas.</p>`:""}
-    <div class="row" style="margin-top:14px">${q.mode==="daily"?`<button class="btn" id="seeRank">Ver la clasificación</button>`:q.mode==="srs"?(srsDueCount()?`<button class="btn" id="again">Seguir repasando</button>`:""):`<button class="btn" id="again">Otra tanda</button>`}<button class="btn ghost" id="closeQ">Cerrar</button></div></div>`;
+    ${q.mode==="srs"?`<p class="muted" style="margin:8px 0 0">Mañana te tocan ${srsForecast(1)} tarjetas.</p>`:""}${q.mode==="duel"?duelSummary(q):""}
+    <div class="row" style="margin-top:14px">${q.mode==="daily"?`<button class="btn" id="seeRank">Ver la clasificación</button>`:q.mode==="srs"?(srsDueCount()?`<button class="btn" id="again">Seguir repasando</button>`:""):q.mode==="duel"?"":`<button class="btn" id="again">Otra tanda</button>`}<button class="btn ghost" id="closeQ">Cerrar</button></div></div>`;
   if(miss.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Para repasar</div><div class="fails">${miss.map(r=>{const it=ITEMS[r.id]; return `<div class="f"><span>${markHTML(r.sc)} <b>${esc(it[1])}</b></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
   return h;
 }
 function answer(){
   const q = S.quiz; const id = q.ids[q.i]; const it = ITEMS[id];
   const sc = scoreOf(it, q.sel); const ms = Math.min(120000, Math.round(performance.now()-q.t0));
-  q.answered = true; q.results.push({id,sc});
+  q.answered = true; q.results.push({id,sc}); q.vp = Array.isArray(it[3]) ? null : bestPair(it, q.sel);
+  if(q.mode==="duel") duelAnswer(q, id, sc, ms);
   if(S.db && S.pid){
     mutateDay(today(), d=>{
       if(q.mode==="daily"){
@@ -747,40 +1123,59 @@ function answer(){
   render();
 }
 function mapHTML(it){
-  if(it.length<7) return "";
-  const [lat,lng,approx] = [it[5],it[6],it[7]];
-  const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${lat}" data-lng="${lng}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${approx?"Punto aproximado: un punto de la calle, no el portal":"Ubicación de la calle"}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div></div>`;
+  const ll = it[5]!=null ? [it[5],it[6]] : null;
+  if(!ll && it[9]==null) return "";
+  const url = ll ? `https://www.google.com/maps/search/?api=1&query=${ll[0]},${ll[1]}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it[1]+", València")}`;
+  const label = it[9]!=null ? (it[0]==="C" ? "Trazado oficial de la calle (Ayuntamiento)" : "En rojo, la calle · el punto es aproximado") : (it[7]?"Punto aproximado: un punto de la calle, no el portal":"Ubicación de la calle");
+  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${ll?ll[0]:""}" data-lng="${ll?ll[1]:""}" data-cv="${it[9]??""}" data-c="${it[0]==="C"?1:0}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${label}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div></div>`;
 }
 let MAP = null;
 function drawMap(){
   if(MAP){ try{ MAP.remove(); }catch{} MAP = null; }
   const el = $("#qmap"); if(!el || !window.L) return;
-  const ll = [+el.dataset.lat, +el.dataset.lng];
-  MAP = L.map(el, {scrollWheelZoom:false, attributionControl:true}).setView(ll, 15);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(MAP);
-  L.circleMarker(ll, {radius:9, color:"#fff", weight:3, fillColor:"#C42A1C", fillOpacity:1}).addTo(MAP);
+  const ll = el.dataset.lat ? [+el.dataset.lat, +el.dataset.lng] : null, cv = el.dataset.cv, isC = el.dataset.c==="1";
+  const m = MAP = L.map(el, {scrollWheelZoom:false}).setView(ll||[39.4699,-0.3763], ll?15:13);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(m);
+  const dot = (p,c)=>L.circleMarker(p, {radius:8, color:"#fff", weight:3, fillColor:c, fillOpacity:1}).addTo(m);
+  if(!cv){ if(ll) dot(ll,"#C42A1C"); return; }
+  loadGeo().then(()=>{ if(MAP!==m) return; const lines=streetLines(cv);
+    if(!lines){ if(ll) dot(ll,"#C42A1C"); return; }
+    const pts=[]; lines.forEach(l=>{ L.polyline(l,{color:"#C42A1C",weight:7,opacity:.9}).addTo(m); pts.push(...l); });
+    if(!isC && ll){ dot(ll,"#15212C"); pts.push(ll); }
+    m.fitBounds(L.latLngBounds(pts),{padding:[24,24],maxZoom:17});
+  });
 }
-function next(){ const q=S.quiz; if(q.mode==="srs" && q.results.length && q.results[q.results.length-1].sc<1 && !q.req.has(q.ids[q.i])){ q.req.add(q.ids[q.i]); q.ids.push(q.ids[q.i]); } if(q.mode==="surv" && q.results.length && q.results[q.results.length-1].sc<1){ q.i=q.ids.length; q.answered=false; render(); return; } q.i++; q.answered=false; q.sel={p:null,a:null,multi:new Set()}; q.t0=performance.now(); render(); }
+function next(){ const q=S.quiz; if(q.mode==="srs" && q.results.length && q.results[q.results.length-1].sc<1 && !q.req.has(q.ids[q.i])){ q.req.add(q.ids[q.i]); q.ids.push(q.ids[q.i]); } if(q.mode==="surv" && q.results.length && q.results[q.results.length-1].sc<1){ q.i=q.ids.length; q.answered=false; render(); return; } q.i++; q.answered=false; q.vp=null; q.sel={p:null,a:null,multi:new Set()}; q.t0=performance.now(); render(); }
 
 function bindView(){
   const on = (sel, fn) => { const el=$(sel); if(el) el.addEventListener("click", fn); };
-  on("#startDaily", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("daily", dailyIds(today())); });
+  on("#startDaily", ()=>{ if(S.db && !S.flagsLoaded) return; if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("daily", dailyIds(today())); });
   on("#startFree", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); });
   on("#startFails", ()=>{ const s=[...pendingFails()]; startQuiz("fails", sample(s, Math.min(20,s.length), Math.random)); });
   on("#nextQ", next);
   on("#startSrs", startSrs);
+  document.querySelectorAll("[data-flag]").forEach(b=>b.addEventListener("click",()=>toggleFlag(+b.dataset.flag)));
+  document.querySelectorAll("[data-unflag]").forEach(b=>b.addEventListener("click",()=>recoverFlag(+b.dataset.unflag)));
+  on("#backup", doBackup);
+  on("#duelNew", ()=>{ S.duelForm = S.duelForm ? null : {rival:null,n:10,mix:"reto"}; render(); });
+  document.querySelectorAll("[data-drival]").forEach(b=>b.addEventListener("click",()=>{ S.duelForm.rival=b.dataset.drival; render(); }));
+  document.querySelectorAll("[data-dn]").forEach(b=>b.addEventListener("click",()=>{ S.duelForm.n=+b.dataset.dn; render(); }));
+  document.querySelectorAll("[data-dmix]").forEach(b=>b.addEventListener("click",()=>{ S.duelForm.mix=b.dataset.dmix; render(); }));
+  on("#duelGo", ()=>{ const f=S.duelForm; if(f&&f.rival){ const btn=$("#duelGo"); if(btn) btn.disabled=true; duelCreate(f.rival,f.n,f.mix); } });
+  document.querySelectorAll("[data-dplay]").forEach(b=>b.addEventListener("click",()=>duelPlay(b.dataset.dplay)));
+  document.querySelectorAll("[data-drematch]").forEach(b=>b.addEventListener("click",()=>{ const D=S.duelsById[b.dataset.drematch]; if(!D) return; S.duelForm={rival:D.a===S.pid?D.b:D.a, n:D.n, mix:D.mix||"reto"}; render(); }));
   on("#trainWeak", e=>{ const k=+e.currentTarget.dataset.weak; const pool=[]; for(const b of ["C","E"]) for(const id of BYBLOCK[b]||[]) if(ITEMS[id][3]===k) pool.push(id); S.view="libre"; startQuiz("free", sample(pool, Math.min(20,pool.length), Math.random)); });
+  document.querySelectorAll("[data-srscap]").forEach(b=>b.addEventListener("click",()=>{ SRS.cfg.cap=+b.dataset.srscap; srsSave(); srsSpread(); render(); }));
   document.querySelectorAll("[data-srsn]").forEach(b=>b.addEventListener("click",()=>{ SRS.cfg.n=+b.dataset.srsn; srsSave(); render(); }));
   document.querySelectorAll("[data-srsb]").forEach(b=>b.addEventListener("click",()=>{ const k=b.dataset.srsb; let a=(SRS.cfg.b||[]).slice(); a=a.includes(k)?a.filter(x=>x!==k):a.concat(k); if(!a.length) a=[k]; SRS.cfg.b=a; srsSave(); render(); }));
   drawMap();
   on("#addrT", ()=>{ S.free.addr = !S.free.addr; render(); });
   on("#quitQ", ()=>{ const q=S.quiz; if(q.mode==="surv" && q.results.length && S.db && S.pid) mutateDay(today(), d=>addSurv(d, q.results.length)); S.quiz=null; render(); });
-  on("#startSurv", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("surv", sample(BYBLOCK.C, 400, Math.random)); });
+  on("#startSurv", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("surv", sample(activePool(BYBLOCK.C), 400, Math.random)); });
   document.querySelectorAll("[data-sort]").forEach(b=>b.addEventListener("click",()=>{ S.rankSort=b.dataset.sort; render(); }));
   const mf=$("#msgForm"); if(mf) mf.addEventListener("submit", e=>{ e.preventDefault(); const v=$("#msgIn").value.trim().slice(0,80); mutateDay(today(), d=>{ if(d.dy) d.dy.msg=v; }); render(); });
   on("#closeQ", ()=>{ S.quiz=null; render(); });
-  on("#again", ()=>{ const m=S.quiz.mode; S.quiz=null; if(m==="surv") return startQuiz("surv", sample(BYBLOCK.C, 400, Math.random)); if(m==="srs") return startSrs(); if(m==="fails"){ const s=[...pendingFails()]; if(s.length) return startQuiz("fails", sample(s,Math.min(20,s.length),Math.random)); render(); } else { const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); } });
+  on("#again", ()=>{ const m=S.quiz.mode; S.quiz=null; if(m==="surv") return startQuiz("surv", sample(activePool(BYBLOCK.C), 400, Math.random)); if(m==="srs") return startSrs(); if(m==="fails"){ const s=[...pendingFails()]; if(s.length) return startQuiz("fails", sample(s,Math.min(20,s.length),Math.random)); render(); } else { const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); } });
   on("#seeRank", ()=>{ S.quiz=null; S.rankRange="hoy"; render(); });
   on("#checkMulti", answer);
   document.querySelectorAll(".park").forEach(b=>b.addEventListener("click",()=>pickPark(b.dataset.row, +b.dataset.i)));
@@ -848,7 +1243,7 @@ function subscribeDays(pid){
     if(pid===S.pid) for(const ds in local) if(!next[ds]) next[ds] = local[ds];
     S.days[pid] = next;
     if(pid===S.pid){ S.myDaysLoaded = true; srsSeed(); }
-    if(!S.quiz || S.view==="rank") render(); else updateLightly();
+    if((!S.quiz || S.view==="rank") && !(S.route && S.view==="rutas")) render();
   }, ()=>{});
 }
 function updateLightly(){ /* during a quiz avoid re-rendering the board */ }
@@ -857,6 +1252,8 @@ async function initDb(){
   S.db = db; S.user = user; S.dbChecked = true;
   if(user){ try{ S.uid = await user.id(); }catch{} try{ const c = await user.can("data.write"); if(c===false){ S.canWrite=false; S.writeError="Tienes acceso de solo lectura: ves el ranking pero no puedes jugar en la liga. "; } }catch{} }
   if(!db){ render(); return; }
+  subscribeDuels();
+  db.collection("flags").limit(2000).onSnapshot(snap=>{ S.flags=snap.docs.map(d=>({...d.data()})).filter(f=>typeof f.i==="number"); S.flagsLoaded=true; if(!S.quiz && !(S.route && S.view==="rutas")) render(); }, ()=>{ S.flagsLoaded=true; });
   db.collection("players").onSnapshot(snap=>{
     const ps = {};
     for(const d of snap.docs){ const v=d.data(); if(v && v.alias) ps[d.id] = v; }
@@ -865,7 +1262,7 @@ async function initDb(){
     if(!S.pid && S.uid){ const hit = Object.entries(ps).find(([,v])=>v.uid===S.uid); if(hit){ S.pid=hit[0]; ls.set("cbl.pid",hit[0]); } }
     if(S.pid && !ps[S.pid] && snap.metadata && !snap.metadata.fromCache){ S.pid=null; }
     if(!S.loaded){ S.loaded = true; if(!S.pid && S.canWrite) askWho(); }
-    if(!S.quiz) render();
+    if(!S.quiz && !(S.route && S.view==="rutas")) render();
   }, ()=>{ render(); });
 }
 
