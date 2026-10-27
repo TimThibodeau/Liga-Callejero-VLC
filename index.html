@@ -172,6 +172,9 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .salidas summary{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;cursor:pointer;list-style:none;font-size:14px}
 .salidas summary::-webkit-details-marker{display:none}
 .salidas ol{margin:8px 0 0;padding-left:22px;font-size:13px;display:flex;flex-direction:column;gap:4px}
+.pcols{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.pcol{display:flex;flex-direction:column;align-items:center;gap:6px;font-family:var(--display);font-weight:700;font-size:14px;text-transform:uppercase;cursor:pointer}
+.pcol input{width:100%;max-width:56px;height:40px;border:1.5px solid var(--line);border-radius:8px;padding:2px;background:var(--surface);cursor:pointer}
 .big{font-family:var(--display);font-weight:700;font-size:22px}
 .scroll{overflow-x:auto}
 .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden}
@@ -269,6 +272,16 @@ function esName(it){
   if(strip(tr)===strip(it[1].replace(/^\S+\s+/,""))) return "";
   return full;
 }
+function parkColor(i){ try{ return getComputedStyle(document.documentElement).getPropertyValue("--p"+i).trim() || "#C42A1C"; }catch{ return "#C42A1C"; } }
+function applyColors(){ const c=S.colors||[]; for(let i=0;i<5;i++){ if(c[i]) document.documentElement.style.setProperty("--p"+i,c[i]); else document.documentElement.style.removeProperty("--p"+i); } }
+function saveColors(){
+  try{ localStorage.setItem("cbl.colors", JSON.stringify(S.colors||[])); }catch{}
+  applyColors();
+  if(S.db && S.pid && S.players[S.pid] && S.canWrite){ const body={...S.players[S.pid], col:(S.colors||[]).map(x=>x||null)}; S.players[S.pid]=body; S.db.doc("players/"+S.pid).set(body).catch(e=>{ try{console.error(e);}catch{} }); }
+}
+function colorsCardHTML(){
+  return `<div class="card"><div class="eyebrow" style="margin-bottom:10px">Colores de los parques</div><div class="pcols">${PARKS.map((_,i)=>`<label class="pcol"><input type="color" data-pcol="${i}" value="${esc(parkColor(i))}" aria-label="Color de ${PSHORT[i]}"><span>${PSHORT[i]}</span></label>`).join("")}</div><div class="spread" style="margin-top:12px"><span class="muted" style="font-size:13px;flex:1 1 220px">Cada uno elige los suyos. Se usan en los botones, en el mapa y en las estadísticas.</span><button class="btn ghost small" id="pcolReset">Colores originales</button></div></div>`;
+}
 function langEs(){ return S.lang==="es"; }
 function bigName(it){ const es=esName(it); return langEs()&&es ? es : it[1]; }
 function smallName(it){ const es=esName(it); if(!es) return ""; return langEs() ? it[1] : es; }
@@ -303,6 +316,7 @@ const S = {
   db: null, user: null, uid: null, canWrite: true, writeError: null,
   pid: ls.get("cbl.pid"), players: {}, days: {}, subs: {}, loaded: false,
   quiz: null, rankRange: "semana", rankSort: "pts", champ: null, duels: [], duelsById: {}, duelForm: null, flags: [], flagsLoaded: false, route: null, rOrig: "p",
+  colors: (()=>{ try{ return JSON.parse(localStorage.getItem("cbl.colors")||"[]")||[]; }catch{ return []; } })(),
   lang: (()=>{ try{ return localStorage.getItem("cbl.lang")||"va"; }catch{ return "va"; } })(),
   free: { blocks: new Set(["C"]), n: 10, parks: new Set([0,1,2,3,4]), addr: true },
 };
@@ -532,13 +546,13 @@ function libreHTML(){
   h += `<div class="card" style="display:flex;flex-direction:column;gap:16px"><div><h2 style="font-size:30px">Entreno libre</h2><p class="muted" style="margin:4px 0 0">Haz todas las tandas que quieras. Cada punto suma a la liga de la semana y del mes.</p></div>`;
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Qué entra</div><div class="chips">${Object.keys(BLOCKS).map(b=>`<button class="chip" data-block="${b}" aria-pressed="${f.blocks.has(b)}">${BLOCKS[b]}<span class="c">${(BYBLOCK[b]||[]).length}</span></button>`).join("")}</div></div>`;
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Parques que entran</div><div class="chips">${PARKS.map((_,i)=>`<button class="chip" data-park="${i}" aria-pressed="${f.parks.has(i)}"><span class="ans" style="--pc:var(--p${i})"><i></i></span> ${PSHORT[i]}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Filtra por parque principal para estudiar la zona de un parque cada vez.</p></div>`;
-  h += `<div><div class="eyebrow" style="margin-bottom:8px">Pistas</div><div class="chips"><button class="chip" id="addrT" aria-pressed="${f.addr}">Mostrar dirección de equipamientos y museos</button></div><p class="muted" style="font-size:13px;margin:6px 0 0">Quítala para el modo difícil: solo el nombre del sitio. Se ve al responder.</p></div>`;
-  h += `<div><div class="eyebrow" style="margin-bottom:8px">Nombre de las calles en grande</div><div class="seg" role="group"><button data-lang="va" aria-pressed="${!langEs()}">Valenciano (oficial)</button><button data-lang="es" aria-pressed="${langEs()}">Castellano</button></div><p class="muted" style="font-size:13px;margin:6px 0 0">Siempre salen los dos: uno en grande y el otro debajo. Vale para todo: reto, entreno, repaso y rutas.</p></div>`;
+  h += `<div><div class="eyebrow" style="margin-bottom:8px">Pistas</div><div class="chips"><button class="chip" id="addrT" aria-pressed="${f.addr}">Mostrar dirección o traducción</button></div><p class="muted" style="font-size:13px;margin:6px 0 0">Quítalas para el modo difícil: solo el nombre del sitio. Se ven al responder.</p></div>`;
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Preguntas por tanda</div><div class="seg" role="group">${[10,20,50].map(n=>`<button data-n="${n}" aria-pressed="${f.n===n}">${n}</button>`).join("")}</div></div>`;
   h += `<div class="spread"><span class="muted">${pool.length.toLocaleString("es-ES")} lugares en juego</span><button class="btn" id="startFree" ${pool.length?"":"disabled"}>Empezar tanda</button></div></div>`;
   const myBest = survBest(S.pid), top = survTop();
   h += `<div class="card spread"><div style="min-width:0;flex:1 1 260px"><h3 style="font-size:24px">Supervivencia</h3><p class="muted" style="margin:4px 0 0">Calles sin parar hasta el primer fallo. Medio acierto también elimina. Cada respuesta suma al entreno.</p><p style="margin:6px 0 0;font-size:14px">Tu récord: <b>${myBest}</b>${top?` · Récord de la liga: <b>${top.best}</b> (${esc(aliasOf(top.id))})`:""}</p></div><button class="btn" id="startSurv">Jugar</button></div>`;
   if(fr?.n) h += `<div class="card grid2"><div class="stat"><span class="eyebrow">Hoy en entreno</span><span class="num">${fmt(fr.pts)} pts</span></div><div class="stat"><span class="eyebrow">Preguntas</span><span class="num">${fr.n}</span></div><div class="stat"><span class="eyebrow">Acierto</span><span class="num">${Math.round(100*fr.pts/fr.n)} %</span></div></div>`;
+  h += colorsCardHTML();
   h += flagsListHTML();
   return h;
 }
@@ -707,7 +721,7 @@ function fallosHTML(){
       <div><div class="eyebrow" style="margin-bottom:8px">Máximo de repasos al día</div><div class="seg" role="group">${[[50,"50"],[100,"100"],[150,"150"],[0,"Sin límite"]].map(([n,l])=>`<button data-srscap="${n}" aria-pressed="${srsCap()===n}">${l}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Si se te acumulan más, se reparten solos en los días siguientes, empezando por tus bestias negras. Así nunca ves una montaña de pendientes.</p></div>
       <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
     const beasts = cards.map(k=>({id:+k,c:srsGet(k)})).filter(x=>x.c.l>=2).sort((a,b)=>b.c.l-a.c.l).slice(0,10);
-    if(beasts.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Tus bestias negras</div><div class="fails">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="f"><span><b>${esc(it[1])}</b>${esSub(it)} <span class="muted">· ${x.c.l} fallos</span></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
+    if(beasts.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Tus bestias negras</div><div class="fails">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="f"><span><b>${esc(it[1])}</b> <span class="muted">· ${x.c.l} fallos</span></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
   }
   h += statsHTML();
   return h;
@@ -866,13 +880,13 @@ function flagHTML(it, id){
   return `<div class="flagrow"><button class="linkbtn" data-flag="${id}">${on?"Quitar mi marca de calle desaparecida":"¿Esta calle ya no existe?"}</button>${n?`<span class="muted">Marcada por ${n} ${n===1?"persona":"personas"}${n>=FLAG_MIN?" · ya no sale en preguntas nuevas":""}</span>`:""}</div>`;
 }
 function flagsListHTML(){
-  if(!S.flags.length) return "";
+  if(!S.db) return "";
   const now=Date.now()+1, by={}; for(const f of S.flags) if(flagActive(f,now)) (by[f.i]||(by[f.i]=new Set())).add(f.p);
-  const ids=Object.keys(by).map(Number); if(!ids.length) return "";
+  const ids=Object.keys(by).map(Number);
   const out=ids.filter(i=>by[i].size>=FLAG_MIN), pend=ids.filter(i=>by[i].size<FLAG_MIN);
   const row=(i,btn)=>`<div class="f"><span><b>${esc(ITEMS[i][1])}</b> <span class="muted">· ${[...by[i]].map(p=>esc(aliasOf(p))).join(", ")}</span></span>${btn}</div>`;
   let h=`<div class="card"><div class="eyebrow" style="margin-bottom:6px">Calles eliminadas por el grupo</div><p class="muted" style="font-size:13px;margin:0 0 6px">Cuando ${FLAG_MIN} personas marcan una calle como desaparecida, deja de salir en el reto (desde el día siguiente), el entreno, los duelos y las nuevas del repaso. El historial no cambia. Si os equivocasteis, recupérala.</p>`;
-  h+= out.length ? `<div class="fails">${out.map(i=>row(i,`<button class="btn ghost small" data-unflag="${i}">Recuperar</button>`)).join("")}</div>` : `<p class="muted" style="font-size:14px;margin:0">Ninguna todavía.</p>`;
+  h+= out.length ? `<div class="fails">${out.map(i=>row(i,`<button class="btn ghost small" data-unflag="${i}">Recuperar</button>`)).join("")}</div>` : `<p style="font-size:14px;margin:0"><b>Ninguna todavía.</b> Para marcar una calle, respóndela (en el reto, el entreno o el repaso) y pulsa el enlace <b>"¿Esta calle ya no existe?"</b> que sale debajo del mapa.</p>`;
   if(pend.length) h+=`<div class="eyebrow" style="margin:14px 0 6px">Con una marca (falta otra)</div><div class="fails">${pend.map(i=>row(i, by[i].has(S.pid)?`<button class="btn ghost small" data-flag="${i}">Quitar mi marca</button>`:`<button class="btn ghost small" data-flag="${i}">Marcar también</button>`)).join("")}</div>`;
   return h+`</div>`;
 }
@@ -1021,7 +1035,7 @@ function routeBoardHTML(ds, done){
 function routeQuestionHTML(){
   const R=S.route, q=R.list[R.i], it=ITEMS[q.id], st=STATIONS[q.o];
   let h=`<div class="qhead"><span class="eyebrow">${R.mode==="daily"?"Recorrido del día":"Práctica"} · ${R.i+1} de ${R.list.length}</span><span class="muted" style="font-size:13px">${q.role==="a"?"Parque que coopera":"Parque que actúa"}</span></div>
-  <div class="plaque"><span class="kind">Desde ${esc(st.n)}</span><span class="name">${esc(bigName(it))}</span>${smallName(it)?`<span class="info">${esc(smallName(it))}</span>`:""}</div>
+  <div class="plaque"><span class="kind">Desde ${esc(st.n)}</span><span class="name">${esc(it[1])}</span>${it[2]?`<span class="info">${esc(it[2])}</span>`:""}</div>
   <div id="rmap" class="rmapbox" role="img" aria-label="Mapa con el parque y la calle de destino"></div>`;
   if(!R.checked){
     h+=`<div class="pick"><label class="eyebrow" for="rin">Tu recorrido</label><div id="rpicks" class="rpicks"></div><div class="rinwrap"><input class="input" id="rin" autocomplete="off" placeholder="Escribe una calle, en valenciano o castellano…"><div id="rsug" class="rsug"></div></div></div>
@@ -1079,7 +1093,7 @@ function quizHTML(){
   const got = q.results.reduce((s,r)=>s+r.sc,0);
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got)} pts</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
-    <div class="plaque"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><span class="name">${esc(bigName(it))}</span>${it[0]==="C" ? (smallName(it)?`<span class="info">${esc(smallName(it))}</span>`:"") : (it[2]&&it[0]!=="P"&&(q.mode==="daily"||S.free.addr||q.answered)?`<span class="info">${esc(it[2])}</span>`:"")}</div>`;
+    <div class="plaque"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[0]!=="P"&&(q.mode==="daily"||S.free.addr||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
   const btns = (row) => PARKS.map((_,i)=>{
     let cls = "", pressed = row==="multi"?q.sel.multi.has(i):q.sel[row]===i;
     if(q.answered){
@@ -1119,7 +1133,7 @@ function summaryHTML(){
     <div class="hero-score" style="margin-top:6px"><span class="num">${fmt(tot)}</span><span class="muted">/ ${q.ids.length}${q.mode==="daily"?" · "+fmtT(myDays()[today()]?.dy?.ms||0):""}</span></div>
     ${q.mode==="srs"?`<p class="muted" style="margin:8px 0 0">Mañana te tocan ${srsForecast(1)} tarjetas.</p>`:""}${q.mode==="duel"?duelSummary(q):""}
     <div class="row" style="margin-top:14px">${q.mode==="daily"?`<button class="btn" id="seeRank">Ver la clasificación</button>`:q.mode==="srs"?(srsDueCount()?`<button class="btn" id="again">Seguir repasando</button>`:""):q.mode==="duel"?"":`<button class="btn" id="again">Otra tanda</button>`}<button class="btn ghost" id="closeQ">Cerrar</button></div></div>`;
-  if(miss.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Para repasar</div><div class="fails">${miss.map(r=>{const it=ITEMS[r.id]; return `<div class="f"><span>${markHTML(r.sc)} <b>${esc(it[1])}</b>${esSub(it)}</span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
+  if(miss.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Para repasar</div><div class="fails">${miss.map(r=>{const it=ITEMS[r.id]; return `<div class="f"><span>${markHTML(r.sc)} <b>${esc(it[1])}</b></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
   return h;
 }
 function answer(){
@@ -1150,8 +1164,9 @@ function mapHTML(it){
   const ll = it[5]!=null ? [it[5],it[6]] : null;
   if(!ll && it[9]==null) return "";
   const url = ll ? `https://www.google.com/maps/search/?api=1&query=${ll[0]},${ll[1]}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it[1]+", València")}`;
-  const label = it[9]!=null ? (it[0]==="C" ? "Trazado oficial de la calle (Ayuntamiento)" : "En rojo, la calle · el punto es aproximado") : (it[7]?"Punto aproximado: un punto de la calle, no el portal":"Ubicación de la calle");
-  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${ll?ll[0]:""}" data-lng="${ll?ll[1]:""}" data-cv="${it[9]??""}" data-c="${it[0]==="C"?1:0}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${label}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div></div>`;
+  const pk = Array.isArray(it[3]) ? it[3][0] : it[3];
+  const label = it[9]!=null ? (it[0]==="C" ? `Trazado oficial, en el color de su parque (${PSHORT[pk]})` : `Su calle, en el color del parque (${PSHORT[pk]}) · el punto es aproximado`) : (it[7]?"Punto aproximado: un punto de la calle, no el portal":"Ubicación de la calle");
+  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${ll?ll[0]:""}" data-lng="${ll?ll[1]:""}" data-cv="${it[9]??""}" data-c="${it[0]==="C"?1:0}" data-pk="${pk}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${label}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div></div>`;
 }
 let MAP = null;
 function drawMap(){
@@ -1161,10 +1176,11 @@ function drawMap(){
   const m = MAP = L.map(el, {scrollWheelZoom:false}).setView(ll||[39.4699,-0.3763], ll?15:13);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(m);
   const dot = (p,c)=>L.circleMarker(p, {radius:8, color:"#fff", weight:3, fillColor:c, fillOpacity:1}).addTo(m);
-  if(!cv){ if(ll) dot(ll,"#C42A1C"); return; }
+  if(!cv){ if(ll) dot(ll,parkColor(+el.dataset.pk||0)); return; }
   loadGeo().then(()=>{ if(MAP!==m) return; const lines=streetLines(cv);
     if(!lines){ if(ll) dot(ll,"#C42A1C"); return; }
-    const pts=[]; lines.forEach(l=>{ L.polyline(l,{color:"#C42A1C",weight:7,opacity:.9}).addTo(m); pts.push(...l); });
+    const col=parkColor(+el.dataset.pk||0);
+    const pts=[]; lines.forEach(l=>{ L.polyline(l,{color:"#fff",weight:12,opacity:.85}).addTo(m); L.polyline(l,{color:col,weight:7,opacity:1}).addTo(m); pts.push(...l); });
     if(!isC && ll){ dot(ll,"#15212C"); pts.push(ll); }
     m.fitBounds(L.latLngBounds(pts),{padding:[24,24],maxZoom:17});
   });
@@ -1194,6 +1210,8 @@ function bindView(){
   document.querySelectorAll("[data-srsb]").forEach(b=>b.addEventListener("click",()=>{ const k=b.dataset.srsb; let a=(SRS.cfg.b||[]).slice(); a=a.includes(k)?a.filter(x=>x!==k):a.concat(k); if(!a.length) a=[k]; SRS.cfg.b=a; srsSave(); render(); }));
   drawMap();
   document.querySelectorAll("[data-lang]").forEach(b=>b.addEventListener("click",()=>{ S.lang=b.dataset.lang; try{localStorage.setItem("cbl.lang",S.lang);}catch{} render(); }));
+  document.querySelectorAll("[data-pcol]").forEach(inp=>inp.addEventListener("change",()=>{ const c=(S.colors||[]).slice(); c[+inp.dataset.pcol]=inp.value; S.colors=c; saveColors(); render(); }));
+  on("#pcolReset", ()=>{ S.colors=[]; saveColors(); render(); });
   on("#addrT", ()=>{ S.free.addr = !S.free.addr; render(); });
   on("#quitQ", ()=>{ const q=S.quiz; if(q.mode==="surv" && q.results.length && S.db && S.pid) mutateDay(today(), d=>addSurv(d, q.results.length)); S.quiz=null; render(); });
   on("#startSurv", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("surv", sample(activePool(BYBLOCK.C), 400, Math.random)); });
@@ -1283,6 +1301,7 @@ async function initDb(){
     const ps = {};
     for(const d of snap.docs){ const v=d.data(); if(v && v.alias) ps[d.id] = v; }
     S.players = ps;
+    if(S.pid && Array.isArray(ps[S.pid]?.col) && JSON.stringify(ps[S.pid].col.map(x=>x||null))!==JSON.stringify((S.colors||[]).map(x=>x||null))){ S.colors=ps[S.pid].col.map(x=>x||undefined); try{ localStorage.setItem("cbl.colors", JSON.stringify(S.colors)); }catch{} applyColors(); }
     for(const id in ps) subscribeDays(id);
     if(!S.pid && S.uid){ const hit = Object.entries(ps).find(([,v])=>v.uid===S.uid); if(hit){ S.pid=hit[0]; ls.set("cbl.pid",hit[0]); } }
     if(S.pid && !ps[S.pid] && snap.metadata && !snap.metadata.fromCache){ S.pid=null; }
@@ -1292,6 +1311,7 @@ async function initDb(){
 }
 
 // ---------- boot ----------
+applyColors();
 fetch("data.json?v="+DATA_V).then(r=>r.json()).then(data=>{
   ITEMS = data.items; BYBLOCK = {};
   ITEMS.forEach((it,i)=>{ (BYBLOCK[it[0]] ||= []).push(i); });
