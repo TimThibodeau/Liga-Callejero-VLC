@@ -62,9 +62,11 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 nav.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
 nav.tabs .wrap{display:grid;grid-template-columns:repeat(5,1fr)}
 nav.tabs button{background:none;border:0;padding:12px 4px 10px;font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);border-bottom:3px solid transparent;min-width:0}
-@media (max-width:420px){nav.tabs button{font-size:14px;letter-spacing:.01em;padding-inline:2px}}
+@media (max-width:520px){nav.tabs button{font-size:14px;letter-spacing:.01em;padding-inline:1px}}
+@media (max-width:370px){nav.tabs button{font-size:11.5px}}
 nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--brand)}
-nav.tabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--brand);margin-left:4px;vertical-align:middle}
+nav.tabs button{position:relative}
+nav.tabs .dot{position:absolute;top:7px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--brand)}
 
 main{padding-block:18px 48px}
 section.view{display:flex;flex-direction:column;gap:16px}
@@ -175,6 +177,27 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .pcols{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
 .pcol{display:flex;flex-direction:column;align-items:center;gap:6px;font-family:var(--display);font-weight:700;font-size:14px;text-transform:uppercase;cursor:pointer}
 .pcol input{width:100%;max-width:56px;height:40px;border:1.5px solid var(--line);border-radius:8px;padding:2px;background:var(--surface);cursor:pointer}
+.bmap{height:360px;border-radius:10px;border:1px solid var(--line);z-index:0}
+.bdg{display:inline-block;font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--bc) 22%,var(--surface));color:var(--ink);border:1.5px solid var(--bc)}
+.segwrap{display:flex;flex-wrap:wrap;max-width:100%}
+.segwrap button{flex:1 1 auto}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:6px;border-radius:3px;margin-right:6px;vertical-align:middle}
+.vitrina{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:12px}
+.vit{display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:4px;text-align:center;min-width:0}
+.vit:disabled{cursor:default}
+.shield{width:72px;height:auto;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))}
+.shield.lock{filter:grayscale(1);opacity:.4}
+.vn{font-size:12px;font-weight:600;line-height:1.2;overflow-wrap:anywhere}
+.vs{font-size:11px}
+.bcar{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:10px 0 6px;scrollbar-width:none}
+.bcar::-webkit-scrollbar{display:none}
+.bcard{flex:0 0 100%;scroll-snap-align:start;background:var(--plaque-bg);color:var(--plaque-ink);border:3px solid var(--plaque-rim);border-radius:14px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.bcard .kind{font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.75}
+.bcard .bn{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;text-transform:uppercase;overflow-wrap:anywhere}
+.bcard .bi{color:var(--plaque-sub);font-size:14px}
+.bcard .bp{background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 10px}
+.beastmap{height:240px;border-radius:10px;border:1px solid var(--line);z-index:0;margin-top:8px}
 .big{font-family:var(--display);font-weight:700;font-size:22px}
 .scroll{overflow-x:auto}
 .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden}
@@ -259,7 +282,9 @@ const firebaseConfig = {
 "use strict";
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
-const DATA_V = "10";
+const DATA_V = "12";
+let DATA_BASE = 1e9;
+const NEW_ITEMS_FROM = "2026-10-30";
 const TYPE_ES = {"C/":"Calle","AV":"Avenida","PL":"Plaza","PL.":"Plaza","CAMI":"Camino","CTRA":"Carretera","ENTD":"Entrada","CV":"Camino Viejo","SENDA":"Senda","PG":"Paseo","PTGE":"Pasaje","GV":"Gran Vía","PTDA":"Partida","PARTIDA":"Partida","CRA":"Carrera","GRUP":"Grupo","BARRI":"Barrio","PONT":"Puente","GLORIETA":"Glorieta"};
 const LOWER = new Set(["de","del","la","las","los","el","y","i","en","d","l"]);
 function titleEs(t){ return t.toLowerCase().split(" ").map((w,i)=>/^[ivxlc]+$/.test(w)&&w.length>1?w.toUpperCase():(i>0&&LOWER.has(w))?w:w.charAt(0).toUpperCase()+w.slice(1)).join(" "); }
@@ -282,6 +307,22 @@ function saveColors(){
 function colorsCardHTML(){
   return `<div class="card"><div class="eyebrow" style="margin-bottom:10px">Colores de los parques</div><div class="pcols">${PARKS.map((_,i)=>`<label class="pcol"><input type="color" data-pcol="${i}" value="${esc(parkColor(i))}" aria-label="Color de ${PSHORT[i]}"><span>${PSHORT[i]}</span></label>`).join("")}</div><div class="spread" style="margin-top:12px"><span class="muted" style="font-size:13px;flex:1 1 220px">Cada uno elige los suyos. Se usan en los botones, en el mapa y en las estadísticas.</span><button class="btn ghost small" id="pcolReset">Colores originales</button></div></div>`;
 }
+function castName(it){
+  if(!it || it[0]!=="C" || !it[2] || it[2]==="null") return "";
+  const tr=String(it[2]).replace(/\.CARRER DE$/i,"").trim(); if(!tr) return "";
+  const pre=it[1].split(" ")[0];
+  return (/^(C\/|AV|PL\.?|CAMI|CTRA|ENTD|CV|SENDA|PG|PTGE|GV|PTDA|CRA|GRUP|BARRI|PONT|GLORIETA)$/i.test(pre) ? pre+" " : "") + tr;
+}
+let CASTMAP=null;
+function castStreet(st){ if(!CASTMAP){ CASTMAP=new Map(); for(const id of BYBLOCK.C||[]){ const it=ITEMS[id]; const c=castName(it); if(c && !CASTMAP.has(it[1].toUpperCase())) CASTMAP.set(it[1].toUpperCase(), c); } } return CASTMAP.get(String(st).trim().toUpperCase()) || null; }
+function infoCast(it){
+  const info=String(it[2]||""); if(it[0]==="C" || !info) return info;
+  const parts=info.split(" · "); const m=parts[0].match(/^([^,]+)(,.*)?$/);
+  if(m){ const c=castStreet(m[1]); const strip=x=>x.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[^A-Z0-9]/g,""); if(c && strip(c)!==strip(m[1])) parts[0]=m[1]+(m[2]||"")+" / "+c; }
+  return parts.join(" · ");
+}
+function mainName(it){ return castName(it) || it[1]; }
+function subName(it){ const c=castName(it); if(!c) return ""; const strip=x=>x.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[^A-Z0-9]/g,""); return strip(c)===strip(it[1]) ? "" : it[1]; }
 function langEs(){ return S.lang==="es"; }
 function bigName(it){ const es=esName(it); return langEs()&&es ? es : it[1]; }
 function smallName(it){ const es=esName(it); if(!es) return ""; return langEs() ? it[1] : es; }
@@ -290,6 +331,7 @@ const BLOCKS = {C:"Calles",E:"Equipamientos",M:"Museos y monumentos",H:"Hospital
 const BLOCK_ONE = {C:"Calle",E:"Equipamiento municipal",M:"Museo / monumento",H:"Hospital / centro",G:"EGA",P:"Puente del Turia",J:"Parque / jardín"};
 const DAILY_MIX_V1 = [["C",5],["E",2],["M",1],["H",1],["G",1]];
 const MIX_V2_FROM = "2026-10-15";
+const MIX_V3_FROM = "2026-10-30";
 const PCOL = ["#C42A1C","#2B63C6","#1E8A5A","#C77712","#8A44C2","#0F8C9A","#B0336E","#4F5D6B"];
 const $ = (s, el=document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -320,6 +362,7 @@ const S = {
   lang: (()=>{ try{ return localStorage.getItem("cbl.lang")||"va"; }catch{ return "va"; } })(),
   free: { blocks: new Set(["C"]), n: 10, parks: new Set([0,1,2,3,4]), addr: true },
 };
+if(S.view==="zonas"){ S.view="rank"; S.rankMode="bar"; }
 if(!["hoy","libre","rutas","rank","fallos"].includes(S.view)) S.view = "hoy";
 
 // ---------- scoring ----------
@@ -341,9 +384,17 @@ function dailyPlan(ds){
   const rnd = mulberry(hashStr("reto|"+ds)());
   let mix;
   if(ds < MIX_V2_FROM) mix = DAILY_MIX_V1;
-  else { const ega = rnd() < 0.22; const hm = rnd() < 0.5 ? "H" : "M"; mix = ega ? [["C",6],[hm,1],["E",2],["G",1]] : [["C",7],[hm,1],["E",2]]; }
+  else if(ds < MIX_V3_FROM){ const ega = rnd() < 0.22; const hm = rnd() < 0.5 ? "H" : "M"; mix = ega ? [["C",6],[hm,1],["E",2],["G",1]] : [["C",7],[hm,1],["E",2]]; }
+  else {
+    const nG = rnd() < 0.22 ? 1 : 0;
+    const nE = rnd() < 0.7 ? 3 : 4;
+    const rm = rnd(); const nMH = rm < 0.5 ? 1 : rm < 0.85 ? 2 : 3;
+    let nM = 0, nH = 0; for(let k=0;k<nMH;k++){ if(rnd() < 0.75) nM++; else nH++; }
+    mix = [["C", 20-nE-nMH-nG], ["E", nE]];
+    if(nM) mix.push(["M", nM]); if(nH) mix.push(["H", nH]); if(nG) mix.push(["G", 1]);
+  }
   const ex = ds >= "2026-10-27" ? flaggedSet(dayStart(ds)) : null;
-  const pool = b => ex && ex.size ? (BYBLOCK[b]||[]).filter(i=>!ex.has(i)) : (BYBLOCK[b]||[]);
+  const pool = b => (BYBLOCK[b]||[]).filter(i=>(ds>=NEW_ITEMS_FROM || i<DATA_BASE) && !(ex && ex.has(i)));
   const out = [];
   for(const [b,n] of mix) out.push(...sample(pool(b), n, rnd));
   return {mix, ids: sample(out, out.length, rnd)};
@@ -452,6 +503,7 @@ function render(){
   else if(S.view==="hoy") html += hoyHTML();
   else if(S.view==="libre") html += libreHTML();
   else if(S.view==="rutas") html += rutasHTML();
+  else if(S.view==="zonas") html += zonasHTML();
   else if(S.view==="rank") html += rankHTML();
   else html += fallosHTML();
   main.innerHTML = `<section class="view">${html}</section>`;
@@ -472,10 +524,10 @@ function hoyHTML(){
   const done = !!mine?.done; const started = mine && !done && (mine.ans||[]).length>0;
   let h = offlineNote();
   h += `<div class="card"><div class="eyebrow">${esc(longDate(ds))}</div><div class="spread" style="margin-top:6px">
-    <div><h2 style="font-size:30px">Reto del día</h2><p class="muted" style="margin:4px 0 0">10 preguntas, las mismas para todos: ${mixText(dailyPlan(ds).mix)}. Solo vale el primer intento. En empate gana quien tarde menos.</p></div>`;
-  if(done) h += `<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ 10 · ${fmtT(mine.ms||0)}</span></div>`;
+    <div><h2 style="font-size:30px">Reto del día</h2><p class="muted" style="margin:4px 0 0">${dailyIds(ds).length} preguntas, las mismas para todos: ${mixText(dailyPlan(ds).mix)}. Solo vale el primer intento. En empate gana quien tarde menos.</p></div>`;
+  if(done) h += `<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ ${mine.n||dailyIds(ds).length} · ${fmtT(mine.ms||0)}</span></div>`;
   h += `</div>`;
-  if(!done) h += `<div class="row" style="margin-top:14px"><button class="btn" id="startDaily">${started?`Seguir (${mine.ans.length}/10)`:"Empezar reto"}</button></div>`;
+  if(!done) h += `<div class="row" style="margin-top:14px"><button class="btn" id="startDaily">${started?`Seguir (${mine.ans.length}/${dailyIds(ds).length})`:"Empezar reto"}</button></div>`;
   h += `</div>`;
   if(done && S.db && S.canWrite) h += `<form class="card" id="msgForm" style="display:flex;flex-direction:column;gap:8px"><label class="eyebrow" for="msgIn">Tu pulla del día</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="msgIn" maxlength="80" placeholder="Ej.: Mañana os vuelvo a barrer" value="${esc(mine.msg||"")}"><button class="btn small" type="submit">${mine.msg?"Cambiar":"Publicar"}</button></div><span class="muted" style="font-size:13px">Sale junto a tu nota en la clasificación de hoy. Los demás la ven cuando terminan su reto.</span></form>`;
   // status of others
@@ -489,7 +541,7 @@ function hoyHTML(){
       const fin = dy?.done; if(fin) pos++;
       h += `<tr class="${p.id===S.pid?"me":""}"><td class="pos ${fin&&pos===1?"p1":""}">${fin?pos:"–"}</td><td>${whoHTML(p.id, (fin&&(done||p.id===S.pid))?dy.msg:"")}</td>`;
       if(fin) h += `<td class="big">${(done||p.id===S.pid)?fmt(dy.pts):"<span class='pill done'>Hecho</span>"}</td><td class="num">${(done||p.id===S.pid)?fmtT(dy.ms||0):""}</td>`;
-      else if(dy?.ans?.length) h += `<td colspan="2"><span class="pill going">Jugando ${dy.ans.length}/10</span></td>`;
+      else if(dy?.ans?.length) h += `<td colspan="2"><span class="pill going">Jugando ${dy.ans.length}/${dy.n||dailyIds(ds).length}</span></td>`;
       else h += `<td colspan="2"><span class="pill">Pendiente</span></td>`;
       h += `</tr>`;
     }
@@ -507,7 +559,7 @@ function feedHTML(){
   const t=today(), from=addDays(t,-3), iDone=!!myDays()[t]?.dy?.done, ev=[];
   for(const p of playerList()){ const d=S.days[p.id]||{}; const best=survBest(p.id);
     for(const ds in d){ if(ds<from) continue; const doc=d[ds];
-      if(doc.dy?.done){ const show = ds<t || iDone || p.id===S.pid; ev.push({t:doc.dy.end||doc.u||0, pid:p.id, txt: ds===t ? (show?`ha hecho el reto de hoy: <b>${fmt(doc.dy.pts)}</b>/10 en ${fmtT(doc.dy.ms||0)}`:"ya ha hecho el reto de hoy") : `hizo el reto del ${longDate(ds)}: <b>${fmt(doc.dy.pts)}</b>/10`}); }
+      if(doc.dy?.done){ const show = ds<t || iDone || p.id===S.pid; ev.push({t:doc.dy.end||doc.u||0, pid:p.id, txt: ds===t ? (show?`ha hecho el reto de hoy: <b>${fmt(doc.dy.pts)}</b>/${doc.dy.n||10} en ${fmtT(doc.dy.ms||0)}`:"ya ha hecho el reto de hoy") : `hizo el reto del ${longDate(ds)}: <b>${fmt(doc.dy.pts)}</b>/${doc.dy.n||10}`}); }
       if(doc.sv?.at && doc.sv.best>=5) ev.push({t:doc.sv.at,pid:p.id,txt:`ha encadenado <b>${doc.sv.best}</b> calles en Supervivencia${doc.sv.best===best?" (su récord)":""}`});
       if(doc.fr?.n>=30) ev.push({t:doc.u||0,pid:p.id,txt:`${ds===t?"lleva":"hizo"} <b>${doc.fr.n}</b> preguntas de entreno ${ds===t?"hoy":"el "+longDate(ds)}`});
     }
@@ -574,6 +626,10 @@ function rangeDays(r){
   return ["0000-00-00", t];
 }
 function rankHTML(){
+  const seg=`<div class="seg" role="group" style="align-self:flex-start"><button data-rmode="liga" aria-pressed="${S.rankMode!=="bar"}">La liga</button><button data-rmode="bar" aria-pressed="${S.rankMode==="bar"}">Barrios y mapa</button></div>`;
+  return seg + (S.rankMode==="bar" ? zonasHTML() : ligaHTML());
+}
+function ligaHTML(){
   const [from,to] = rangeDays(S.rankRange);
   const ps = playerList();
   const rows = ps.map(p=>{
@@ -635,14 +691,14 @@ function srsRef(){ return S.db && S.pid ? S.db.doc(`players/${S.pid}/srs/main`) 
 function ensureSrs(){ if(S.db && S.pid && SRS.pidSub!==S.pid){ SRS.pidSub=S.pid; srsSubscribe(); } }
 function srsSubscribe(){
   if(SRS.sub){ try{SRS.sub();}catch{} SRS.sub=null; }
-  SRS.loaded=false; SRS.c={}; SRS.cfg={n:10,b:["C"]}; SRS.nd=""; SRS.nn=0;
+  SRS.loaded=false; SRS.c={}; SRS.lo={}; SRS.cfg={n:10,b:["C"]}; SRS.nd=""; SRS.nn=0;
   const ref=srsRef(); if(!ref) return;
   SRS.sub = ref.onSnapshot(snap=>{
     if(SRS.busy || SRS.dirty) return;
     const v = snap.exists ? snap.data() : null;
-    if(v){ SRS.c={...(v.c||{})}; SRS.cfg={n:10,b:["C"],...(v.cfg||{})}; SRS.nd=v.nd||""; SRS.nn=v.nn||0; }
+    if(v){ SRS.lo={...(v.lo||{})}; SRS.c={...(v.c||{})}; SRS.cfg={n:10,b:["C"],...(v.cfg||{})}; SRS.nd=v.nd||""; SRS.nn=v.nn||0; }
     const first = !SRS.loaded; SRS.loaded=true;
-    if(first){ srsSeed(); srsSpread(); }
+    if(first){ srsSeed(); loSeed(); srsSpread(); }
     if(!S.quiz && !(S.route && S.view==="rutas")) render();
   }, e=>{ SRS.loaded=true; srsError(e); });
 }
@@ -652,12 +708,22 @@ function srsSeed(){
   for(const id of pendingFails()) if(!srsGet(id)) srsPut(id,{d:t,iv:0,e:250,r:0,l:1});
   SRS.cfg.s=1; srsSave();
 }
-function srsSave(){ SRS.dirty=true; clearTimeout(SRS.timer); SRS.timer=setTimeout(srsFlush, 800); }
+function loSeed(){
+  if(!SRS.loaded || !S.myDaysLoaded || SRS.cfg.lo1) return;
+  const days=Object.keys(myDays()).sort();
+  for(const ds of days){ const d=myDays()[ds];
+    for(const a of (d.dy?.ans||[])){ const id=Array.isArray(a)?a[0]:a.i, sc=Array.isArray(a)?a[1]:a.s; if(id!=null) SRS.lo[id]=sc; }
+    const o=d.o||{}; for(const k in o) SRS.lo[k]= o[k]===1 ? 1 : 0;
+  }
+  SRS.cfg.lo1=1; srsSave();
+}
+function srsSaveLazy(){ SRS.dirty=true; if(SRS.timer) return; SRS.timer=setTimeout(()=>{ SRS.timer=null; srsFlush(); }, 4000); }
+function srsSave(){ SRS.dirty=true; clearTimeout(SRS.timer); SRS.timer=setTimeout(()=>{ SRS.timer=null; srsFlush(); }, 800); }
 async function srsFlush(){
   const ref=srsRef(); if(!ref || !S.canWrite){ SRS.dirty=false; return; }
   if(SRS.busy){ SRS.timer=setTimeout(srsFlush,500); return; }
   SRS.busy=true; SRS.dirty=false;
-  try{ await ref.set({c:SRS.c, cfg:SRS.cfg, nd:SRS.nd, nn:SRS.nn, u:Date.now()}); }catch(e){ srsError(e); }
+  try{ await ref.set({c:SRS.c, lo:SRS.lo||{}, cfg:SRS.cfg, nd:SRS.nd, nn:SRS.nn, u:Date.now()}); }catch(e){ srsError(e); }
   SRS.busy=false;
 }
 function srsError(e){ try{console.error("Repaso",e);}catch{} S.writeError="No se ha podido guardar el repaso. En la web de GitHub, revisa que has pegado las reglas nuevas en Firebase (Firestore → Reglas)."; render(); }
@@ -720,8 +786,8 @@ function fallosHTML(){
     h += `<div class="card" style="display:flex;flex-direction:column;gap:12px"><div><div class="eyebrow" style="margin-bottom:8px">Nuevas por día</div><div class="seg" role="group">${[0,10,20,30].map(n=>`<button data-srsn="${n}" aria-pressed="${(SRS.cfg.n||0)===n}">${n}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Tarjetas que aún no has visto y que entran en el repaso cada día, como las nuevas de Anki. Con 0 solo repasas tus fallos.</p></div>
       <div><div class="eyebrow" style="margin-bottom:8px">Máximo de repasos al día</div><div class="seg" role="group">${[[50,"50"],[100,"100"],[150,"150"],[0,"Sin límite"]].map(([n,l])=>`<button data-srscap="${n}" aria-pressed="${srsCap()===n}">${l}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Si se te acumulan más, se reparten solos en los días siguientes, empezando por tus bestias negras. Así nunca ves una montaña de pendientes.</p></div>
       <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
-    const beasts = cards.map(k=>({id:+k,c:srsGet(k)})).filter(x=>x.c.l>=2).sort((a,b)=>b.c.l-a.c.l).slice(0,10);
-    if(beasts.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Tus bestias negras</div><div class="fails">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="f"><span><b>${esc(it[1])}</b> <span class="muted">· ${x.c.l} fallos</span></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
+    const beasts = cards.map(k=>({id:+k,c:srsGet(k)})).filter(x=>x.c.l>=2).sort((a,b)=>b.c.l-a.c.l).slice(0,15);
+    if(beasts.length) h += `<div class="card"><div class="spread"><span class="eyebrow">Tus bestias negras</span><span class="row" style="gap:6px"><button class="btn ghost small" id="bprev" aria-label="Anterior">‹</button><span class="muted num" id="bpos" style="font-size:15px">1 de ${beasts.length}</span><button class="btn ghost small" id="bnext" aria-label="Siguiente">›</button></span></div><div class="bcar" id="bcar">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="bcard" data-bi="${x.id}"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><b class="bn">${esc(it[1])}</b>${it[2]&&it[2]!=="null"&&it[0]!=="P"?`<span class="muted bi">${esc(it[2])}</span>`:""}<div class="bp">${ansHTML(it)}</div><span class="pill lost">${x.c.l} fallos</span></div>`;}).join("")}</div>${window.L?`<div id="beastmap" class="beastmap" role="img" aria-label="Mapa de la bestia negra"></div>`:""}</div>`;
   }
   h += statsHTML();
   return h;
@@ -772,8 +838,10 @@ function duelsHTML(){
     <div><div class="eyebrow" style="margin-bottom:8px">Qué entra</div><div class="seg" role="group">${Object.entries(DUEL_MIX).map(([k,l])=>`<button data-dmix="${k}" aria-pressed="${f.mix===k}">${l}</button>`).join("")}</div></div>
     <div><button class="btn" id="duelGo" ${f.rival?"":"disabled"}>Lanzar el duelo</button></div></div>`; }
   const mine=S.duels.filter(D=>D.a===S.pid||D.b===S.pid);
-  const others=S.duels.filter(D=>D.a!==S.pid&&D.b!==S.pid).slice(0,5);
-  if(mine.length) h+=`<div class="dlist">${mine.slice(0,10).map(duelRow).join("")}</div>`;
+  const others=S.duels.filter(D=>D.a!==S.pid&&D.b!==S.pid).slice(0,S.duelsAll?10:2);
+  const pend=mine.filter(D=>!duelWinner(D)), fin=mine.filter(D=>duelWinner(D));
+  const shown = S.duelsAll ? mine : pend.concat(fin.slice(0,2));
+  if(mine.length) h+=`<div class="dlist">${shown.map(duelRow).join("")}</div>${mine.length>shown.length||S.duelsAll?`<button class="linkbtn" id="duelsAll" style="margin-top:6px">${S.duelsAll?"Ver menos":`Ver todos mis duelos (${mine.length})`}</button>`:""}`;
   else if(!S.duelForm) h+=`<p class="muted" style="margin:10px 0 0;font-size:14px">Aún no tienes duelos. Reta a alguien.</p>`;
   if(others.length) h+=`<div class="eyebrow" style="margin:14px 0 6px">Otros duelos</div><div class="dlist">${others.map(duelRow).join("")}</div>`;
   return h+`</div>`;
@@ -998,7 +1066,7 @@ function drawRouteMap(){
   if(RMAP){ try{RMAP.remove();}catch{} RMAP=null; }
   const el=$("#rmap"); const R=S.route; if(!el||!window.L||!R||R.i>=R.list.length) return;
   const q=R.list[R.i], it=ITEMS[q.id], st=STATIONS[q.o];
-  RMAP=L.map(el,{scrollWheelZoom:false});
+  RMAP=L.map(el,{scrollWheelZoom:false, zoomAnimation:false, fadeAnimation:false, markerZoomAnimation:false});
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(RMAP);
   const pts=[st.ll];
   L.circleMarker(st.ll,{radius:9,color:"#fff",weight:3,fillColor:"#15212C",fillOpacity:1}).addTo(RMAP).bindTooltip(st.n,{permanent:true,direction:"top",className:"rtip"});
@@ -1006,7 +1074,7 @@ function drawRouteMap(){
     if(lines) lines.forEach(l=>{ L.polyline(l,{color:"#C42A1C",weight:7,opacity:.9}).addTo(RMAP); pts.push(...l); });
     if(dest){ L.circleMarker(dest,{radius:9,color:"#fff",weight:3,fillColor:"#C42A1C",fillOpacity:1}).addTo(RMAP); pts.push(dest); }
     if(R.checked && R.res){ L.polyline(R.res.line,{color:"#2B63C6",weight:5,opacity:.85}).addTo(RMAP); pts.push(...R.res.line); }
-    RMAP.fitBounds(L.latLngBounds(pts),{padding:[24,24]});
+    RMAP.fitBounds(L.latLngBounds(pts),{padding:[24,24],animate:false});
   });
 }
 function rutasHTML(){
@@ -1074,13 +1142,252 @@ function bindRoutes(){
   drawPicks(); drawRouteMap();
 }
 
+// ----- BARRIOS E INSIGNIAS -----
+const DISTRITOS = {1:"Ciutat Vella",2:"L'Eixample",3:"Extramurs",4:"Campanar",5:"La Saïdia",6:"El Pla del Real",7:"L'Olivereta",8:"Patraix",9:"Jesús",10:"Quatre Carreres",11:"Poblats Marítims",12:"Camins al Grau",13:"Algirós",14:"Benimaclet",15:"Rascanya",16:"Benicalap",17:"Pobles del Nord",18:"Pobles de l'Oest",19:"Pobles del Sud"};
+const BAR = {state:"idle", list:[], of:{}, byId:{}, lo:{}, loAt:0, fr:[]};
+const LVL=["Sin insignia","Bronce","Plata","Oro"], LVLC=["#9AA7B3","#B87333","#A8B3BD","#E0B12E"];
+function propsOf(f){ const p=f.properties||{}; const g=(...ks)=>{ for(const k of ks){ const v=p[k]??p[k.toUpperCase()]; if(v!=null&&v!=="") return v; } return null; };
+  const nm=String(g("nombre","barrio","nom","nombre_barrio","nom_barri")||"Barrio");
+  const code=String(g("coddistbar","codbarrio","cod_barrio")||nm);
+  let d=+(g("coddistrit","coddistrito","distrito","cod_distrito")||0); if(!d && /^\d+[.\-]/.test(code)) d=parseInt(code,10);
+  const name=nm.toLowerCase().replace(/(^|[\s\-'’(])(\p{L})/gu,(m,a,b)=>a+b.toUpperCase()).replace(/ (Del|De|La|Les|Els|El|I|L'|D')(?= )/g,(m,w)=>' '+w.toLowerCase());
+  return {name, d, code:(d&&!/[.\-]/.test(code)?d+"."+code:code)}; }
+function ringContains(r,x,y){ let c=false; for(let i=0,j=r.length-1;i<r.length;j=i++){ const xi=r[i][0],yi=r[i][1],xj=r[j][0],yj=r[j][1]; if(((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi)) c=!c; } return c; }
+function polyContains(poly,x,y){ if(!ringContains(poly[0],x,y)) return false; for(let k=1;k<poly.length;k++) if(ringContains(poly[k],x,y)) return false; return true; }
+function modeOf(arr){ const c={}; let best=null,bn=0; for(const x of arr){ c[x]=(c[x]||0)+1; if(c[x]>bn){bn=c[x];best=x;} } return best; }
+function loadBarrios(){
+  if(BAR.state!=="idle") return; BAR.state="loading";
+  loadGeo().then(()=>fetch("barrios.geojson?v="+DATA_V)).then(r=>r.ok?r:fetch("barrios.json?v="+DATA_V)).then(r=>{ if(!r.ok) throw new Error("no"); return r.json(); }).then(gj=>{
+    const list=[];
+    for(const f of featuresFrom(gj)){ const polys=f.polys;
+      let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9; for(const p of polys) for(const [x,y] of p[0]){ if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; }
+      const pr=propsOf(f); list.push({...pr, id:pr.code, polys, bb:[minx,miny,maxx,maxy], items:[]}); }
+    const of={};
+    for(const id of BYBLOCK.C||[]){ const ll=itemLL(ITEMS[id]); if(!ll) continue; const x=ll[1], y=ll[0];
+      for(const b of list){ if(x<b.bb[0]||x>b.bb[2]||y<b.bb[1]||y>b.bb[3]) continue; if(b.polys.some(p=>polyContains(p,x,y))){ b.items.push(id); of[id]=b.id; break; } } }
+    BAR.list=list.filter(b=>b.items.length).sort((a,b)=>a.d-b.d||a.name.localeCompare(b.name,"es")); BAR.of=of; BAR.byId=Object.fromEntries(BAR.list.map(b=>[b.id,b]));
+    BAR.fr=frontierGroups(); BAR.state="ready"; loadAllLo(true); render();
+  }).catch(()=>{ BAR.state="missing"; render(); });
+}
+function frontierGroups(){
+  const ids=(BYBLOCK.C||[]).filter(id=>ITEMS[id][5]!=null && !Array.isArray(ITEMS[id][3]));
+  const cell=0.003, grid=new Map(), key=(a,b)=>a+"|"+b;
+  for(const id of ids){ const it=ITEMS[id]; const k=key(Math.floor(it[5]/cell),Math.floor(it[6]/cell)); if(!grid.has(k)) grid.set(k,[]); grid.get(k).push(id); }
+  const groups={};
+  for(const id of ids){ const it=ITEMS[id]; const gx=Math.floor(it[5]/cell), gy=Math.floor(it[6]/cell); const near=[];
+    for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++) for(const j of grid.get(key(gx+dx,gy+dy))||[]){ if(j===id) continue; const o=ITEMS[j]; const dd=(o[5]-it[5])**2+((o[6]-it[6])*0.77)**2; if(dd<0.0018*0.0018) near.push([dd,j]); }
+    near.sort((a,b)=>a[0]-b[0]);
+    const other=near.slice(0,6).map(x=>ITEMS[x[1]][3]).filter(p=>p!==it[3]);
+    const zones=(it[8]||[]).map(z=>z[0]).filter(p=>p!==it[3]);
+    const cand = zones.length ? zones[0] : (other.length>=2 ? modeOf(other) : null);
+    if(cand==null) continue;
+    const pair=[it[3],cand].sort((a,b)=>a-b).join("-"); (groups[pair]||(groups[pair]=[])).push(id);
+  }
+  return Object.entries(groups).filter(([,v])=>v.length>=15).map(([k,v])=>({id:k, a:+k.split("-")[0], b:+k.split("-")[1], items:v})).sort((x,y)=>y.items.length-x.items.length);
+}
+async function loadAllLo(force){
+  if(S.pid && SRS.loaded) BAR.lo[S.pid]=SRS.lo;
+  if(!S.db || (!force && Date.now()-BAR.loAt<120000)) return; BAR.loAt=Date.now();
+  await Promise.all(playerList().filter(p=>p.id!==S.pid).map(async p=>{ try{ const d=await S.db.doc(`players/${p.id}/srs/main`).get(); BAR.lo[p.id]=d.exists?((d.data()||{}).lo||{}):{}; }catch{ BAR.lo[p.id]={}; } }));
+  if(S.view==="rank" && S.rankMode==="bar" && !S.quiz) render();
+}
+function levelOf(items, lo){
+  const ex=flaggedSet(Date.now()+1); let n=0,a=0,sum=0;
+  for(const i of items){ if(ex.has(i)) continue; n++; const v=lo?.[i]; if(v!=null){ a++; sum+=v; } }
+  const cov=n?a/n:0, acc=a?sum/a:0; let lvl=0; if(cov>=0.8){ if(acc>=0.95) lvl=3; else if(acc>=0.85) lvl=2; else if(acc>=0.7) lvl=1; }
+  return {n,a,cov,acc,lvl};
+}
+function kingOf(items){ let best=null; for(const p of playerList()){ const L=levelOf(items,BAR.lo[p.id]); if(!L.lvl) continue; if(!best||L.acc>best.L.acc||(L.acc===best.L.acc&&L.cov>best.L.cov)) best={pid:p.id,L}; } return best; }
+function badge(l){ return `<span class="bdg" style="--bc:${LVLC[l]}">${LVL[l]}</span>`; }
+function pct(x){ return Math.round(100*x)+" %"; }
+function parksMix(items){ const c={}; for(const i of items){ const k=ITEMS[i][3]; c[k]=(c[k]||0)+1; } return Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${PSHORT[k]} ${Math.round(100*v/items.length)} %`).join(" · "); }
+function barriosHTML(){
+  if(BAR.state==="idle") loadBarrios();
+  if(BAR.state!=="ready" && BAR.state!=="missing") return `<div class="card"><p class="muted" style="margin:0">Cargando los barrios…</p></div>`;
+  if(BAR.state==="missing") return `<div class="card"><h3 style="font-size:22px">Falta el mapa de barrios</h3><p class="muted" style="margin:6px 0 0">Para las insignias, la web necesita el archivo <b>barrios.geojson</b> del Ayuntamiento subido a GitHub junto a los demás archivos.</p></div>`;
+  if(S.pid && SRS.loaded) BAR.lo[S.pid]=SRS.lo; loadAllLo(false);
+  const me=S.pid, ps=playerList();
+  const rows=BAR.list.map(b=>({b,L:levelOf(b.items,BAR.lo[me]),K:kingOf(b.items)}));
+  let h=`<div class="card"><h2 style="font-size:28px">Insignias por barrio</h2><p class="muted" style="margin:4px 0 10px;font-size:14px">Cuenta la última vez que respondiste cada calle, en cualquier modo, sin saber de qué barrio era. Para optar a insignia hay que haber respondido el 80 % de las calles del barrio. Bronce desde el 70 % de acierto, plata desde el 85 %, oro desde el 95 %. Solo calidad: hacer más preguntas no sube la nota.</p>`;
+  const cnt=[0,0,0,0]; rows.forEach(r=>cnt[r.L.lvl]++); const crowns=rows.filter(r=>r.K&&r.K.pid===me).length;
+  h+=`<div class="grid2"><div class="stat"><span class="eyebrow">Oros</span><span class="num" style="color:${LVLC[3]}">${cnt[3]}</span></div><div class="stat"><span class="eyebrow">Platas</span><span class="num">${cnt[2]}</span></div><div class="stat"><span class="eyebrow">Bronces</span><span class="num" style="color:${LVLC[1]}">${cnt[1]}</span></div><div class="stat"><span class="eyebrow">Coronas</span><span class="num">♛ ${crowns}</span></div></div></div>`;
+  // ranking
+  const rk=ps.map(p=>{ const c=[0,0,0,0]; let cr=0; for(const r of rows){ const L=p.id===me?r.L:levelOf(r.b.items,BAR.lo[p.id]); c[L.lvl]++; if(r.K&&r.K.pid===p.id) cr++; }
+    const dist={}; for(const r of rows){ const L=p.id===me?r.L:levelOf(r.b.items,BAR.lo[p.id]); (dist[r.b.d]||(dist[r.b.d]=[])).push(L.lvl); } const dc=Object.values(dist).filter(a=>a.every(l=>l>=2)).length;
+    return {p,c,cr,dc}; }).sort((a,b)=>b.cr-a.cr||b.c[3]-a.c[3]||b.c[2]-a.c[2]||b.dc-a.dc);
+  h+=`<div class="card"><h3 style="font-size:22px">Ranking de insignias</h3><div class="scroll" style="margin-top:8px"><table class="tbl"><thead><tr><th>#</th><th>Jugador</th><th title="Barrios donde eres rey">♛</th><th>Oro</th><th>Plata</th><th>Bronce</th><th title="Distritos con todos sus barrios en plata u oro">Distritos</th></tr></thead><tbody>${rk.map((r,i)=>`<tr class="${r.p.id===me?"me":""}"><td class="pos ${i===0&&r.cr?"p1":""}">${i+1}</td><td>${whoHTML(r.p.id)}</td><td class="big">${r.cr}</td><td>${r.c[3]}</td><td>${r.c[2]}</td><td>${r.c[1]}</td><td>${r.dc}</td></tr>`).join("")}</tbody></table></div></div>`;
+  // districts
+  const byD={}; for(const r of rows) (byD[r.b.d]||(byD[r.b.d]=[])).push(r);
+  h+=`<div class="card"><h3 style="font-size:22px">Distritos y barrios</h3>`;
+  for(const d of Object.keys(byD).sort((a,b)=>a-b)){ const rs=byD[d]; const comp=rs.every(r=>r.L.lvl>=2);
+    const crowns={}; rs.forEach(r=>{ if(r.K) crowns[r.K.pid]=(crowns[r.K.pid]||0)+1; }); const lord=Object.entries(crowns).sort((a,b)=>b[1]-a[1])[0];
+    h+=`<details class="salidas"><summary><span><b>${esc(DISTRITOS[d]||("Distrito "+d))}</b>${comp?` ${badge(2)}`:""}</span><span class="muted">${rs.filter(r=>r.L.lvl).length}/${rs.length} con insignia${lord?` · Señor: ${esc(aliasOf(lord[0]))}`:""}</span></summary><div class="fails">${rs.map(r=>`<div class="f"><button class="linkbtn" data-bsel="${esc(r.b.id)}">${esc(r.b.name)}</button><span>${r.L.lvl?badge(r.L.lvl):`<span class="muted">${pct(r.L.acc)} · visto ${pct(r.L.cov)}</span>`}${r.K?` <span class="muted">♛ ${esc(aliasOf(r.K.pid))}</span>`:""}</span></div>`).join("")}</div></details>`; }
+  h+=`</div>`;
+  return h;
+}
+function barDetailHTML(b){
+  const ps=playerList();
+  const rows=ps.map(p=>({p,L:levelOf(b.items,BAR.lo[p.id])})).sort((x,y)=>y.L.lvl-x.L.lvl||y.L.acc-x.L.acc);
+  const K=kingOf(b.items);
+  return `<div class="card"><div class="spread"><div><div class="eyebrow">${esc(DISTRITOS[b.d]||"")}</div><h3 style="font-size:24px">${esc(b.name)}</h3></div><button class="btn ghost small" id="bclose">Cerrar</button></div>
+  <p class="muted" style="margin:6px 0 10px;font-size:14px">${b.items.length} calles · ${parksMix(b.items)}${K?` · ♛ ${esc(aliasOf(K.pid))}`:""}</p>
+  <div class="scroll"><table class="tbl"><thead><tr><th></th><th>Jugador</th><th>Acierto</th><th>Visto</th><th>Insignia</th></tr></thead><tbody>${rows.map(r=>`<tr class="${r.p.id===S.pid?"me":""}"><td>${K&&K.pid===r.p.id?"♛":""}</td><td>${whoHTML(r.p.id)}</td><td>${r.L.a?pct(r.L.acc):"–"}</td><td>${pct(r.L.cov)}</td><td>${r.L.lvl?badge(r.L.lvl):"–"}</td></tr>`).join("")}</tbody></table></div>
+  <div class="spread" style="margin-top:12px"><span class="muted" style="font-size:13px;flex:1 1 220px">Practicar aquí sabiendo el barrio no cuenta para las insignias.</span><button class="btn small" data-bprac="${esc(b.id)}">Practicar este barrio</button></div></div>`;
+}
+let BMAP=null;
+function drawBarMap(){
+  if(BMAP){ try{BMAP.remove();}catch{} BMAP=null; }
+  const el=$("#bmap"); if(!el||!window.L||BAR.state!=="ready") return;
+  BMAP=L.map(el,{scrollWheelZoom:false, zoomAnimation:false, fadeAnimation:false, markerZoomAnimation:false});
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(BMAP);
+  const all=[];
+  for(const b of BAR.list){
+    let col="#9AA7B3", op=.15;
+    if((S.bview||"mine")==="mine"){ const L2=levelOf(b.items,BAR.lo[S.pid]); col=LVLC[L2.lvl]; op=L2.lvl?.55:.12+.3*L2.cov; }
+    else { const K=kingOf(b.items); if(K){ col=colorOf(K.pid); op=.55; } }
+    const latlngs=b.polys.map(p=>p.map(r=>r.map(([x,y])=>[y,x])));
+    const pg=L.polygon(latlngs,{color:"#15212C",weight:1,fillColor:col,fillOpacity:op}).addTo(BMAP);
+    pg.bindTooltip(b.name,{sticky:true}); pg.on("click",()=>{ S.barSel=b.id; render(); setTimeout(()=>{ const d=document.querySelector("#bclose"); if(d) d.scrollIntoView({block:"center"}); },50); });
+    all.push(...latlngs[0][0]);
+  }
+  if(all.length) BMAP.fitBounds(L.latLngBounds(all),{padding:[10,10],animate:false});
+}
+
+// ----- ZONAS: mapa de fallos, vitrina, carrusel -----
+function utmToLL(E,N){
+  const a=6378137, f=1/298.257222101, k0=0.9996, e2=f*(2-f), e1=(1-Math.sqrt(1-e2))/(1+Math.sqrt(1-e2)), ep2=e2/(1-e2);
+  const x=E-500000, M=N/k0, mu=M/(a*(1-e2/4-3*e2*e2/64-5*e2**3/256));
+  const p1=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)+(21*e1*e1/16-55*e1**4/32)*Math.sin(4*mu)+(151*e1**3/96)*Math.sin(6*mu);
+  const s=Math.sin(p1), c=Math.cos(p1), t=Math.tan(p1), N1=a/Math.sqrt(1-e2*s*s), T1=t*t, C1=ep2*c*c, R1=a*(1-e2)/Math.pow(1-e2*s*s,1.5), D=x/(N1*k0);
+  const lat=p1-(N1*t/R1)*(D*D/2-(5+3*T1+10*C1-4*C1*C1-9*ep2)*D**4/24+(61+90*T1+298*C1+45*T1*T1-252*ep2-3*C1*C1)*D**6/720);
+  const lon=(D-(1+2*T1+C1)*D**3/6+(5-2*C1+28*T1-3*C1*C1+8*ep2+24*T1*T1)*D**5/120)/c;
+  return [lon*180/Math.PI-3, lat*180/Math.PI];
+}
+function ringArea(r){ let s=0; for(let i=0,j=r.length-1;i<r.length;j=i++) s+=(r[j][0]-r[i][0])*(r[j][1]+r[i][1]); return s; }
+function featuresFrom(gj){
+  const out=[];
+  for(const f of (gj.features||[])){
+    const props=f.properties||f.attributes||{}; const g=f.geometry; let polys=[];
+    if(g && g.type==="Polygon") polys=[g.coordinates];
+    else if(g && g.type==="MultiPolygon") polys=g.coordinates;
+    else if(g && g.rings){ for(const r of g.rings){ if(ringArea(r)>0 || !polys.length) polys.push([r]); else polys[polys.length-1].push(r); } }
+    if(!polys.length || !polys[0][0] || !polys[0][0][0]) continue;
+    if(Math.abs(polys[0][0][0][0])>1000) polys=polys.map(p=>p.map(r=>r.map(([x,y])=>utmToLL(x,y))));
+    out.push({properties:props, polys});
+  }
+  return out;
+}
+function shieldSVG(lvl, c1, c2, mono, stars){
+  const metal=["#8A949E","#B87333","#B9C2CA","#E0B12E"][lvl];
+  return `<svg viewBox="0 0 100 118" class="shield${lvl?"":" lock"}" aria-hidden="true"><path d="M50 3 L95 15 V56 C95 86 74 104 50 115 C26 104 5 86 5 56 V15 Z" fill="${metal}"/><path d="M50 11 L87 21 V56 C87 81 70 96 50 106 C30 96 13 81 13 56 V21 Z" fill="${c1}"/><path d="M50 11 L87 21 V56 C87 81 70 96 50 106 Z" fill="${c2}"/><text x="50" y="72" text-anchor="middle" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="700" font-size="30" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width="1">${esc(mono)}</text>${Array.from({length:stars},(_,i)=>`<text x="${50+(i-(stars-1)/2)*15}" y="40" text-anchor="middle" font-size="14" fill="#fff">★</text>`).join("")}</svg>`;
+}
+function monoOf(name){ const w=name.replace(/['’]/g," ").split(/\s+/).filter(x=>x && !/^(de|del|la|el|les|els|l|d|i|y)$/i.test(x)); return (w.length>1? w[0][0]+w[1][0] : (w[0]||"?").slice(0,2)).toUpperCase(); }
+function topParks(items){ const c={}; for(const i of items){ const k=ITEMS[i][3]; if(typeof k==="number") c[k]=(c[k]||0)+1; } const s=Object.entries(c).sort((a,b)=>b[1]-a[1]).map(x=>+x[0]); return [s[0]??0, s[1]??s[0]??0]; }
+function vitrinaHTML(){
+  const me=S.pid, lo=BAR.lo[me]||SRS.lo||{}; const sh=[];
+  if(BAR.state==="ready") for(const b of BAR.list){ const L=levelOf(b.items,lo); const [p1,p2]=topParks(b.items); sh.push({id:b.id, name:b.name, L, svg:shieldSVG(L.lvl,parkColor(p1),parkColor(p2),monoOf(b.name),L.lvl)}); }
+  for(const f of BAR.fr){ const L=levelOf(f.items,lo); sh.push({id:"", name:`Frontera ${PSHORT[f.a]}–${PSHORT[f.b]}`, L, svg:shieldSVG(L.lvl,parkColor(f.a),parkColor(f.b),PSHORT[f.a][0]+PSHORT[f.b][0],L.lvl)}); }
+  if(!sh.length) return "";
+  sh.sort((a,b)=>b.L.lvl-a.L.lvl||b.L.cov-a.L.cov);
+  const got=sh.filter(x=>x.L.lvl).length;
+  return `<div class="card"><div class="spread"><h3 style="font-size:24px">Vitrina de escudos</h3><span class="muted" style="font-size:14px">${got} de ${sh.length} conseguidos</span></div><p class="muted" style="margin:4px 0 12px;font-size:13px">Un escudo por barrio y por frontera. Bronce, plata u oro con una, dos o tres estrellas; en gris los que aún no tienes, con lo que llevas visto.</p><div class="vitrina">${sh.map(x=>`<button class="vit" ${x.id?`data-bsel="${esc(x.id)}"`:"disabled"}>${x.svg}<span class="vn">${esc(x.name)}</span><span class="muted vs">${x.L.lvl?LVL[x.L.lvl]:`visto ${pct(x.L.cov)}`}</span></button>`).join("")}</div></div>`;
+}
+const HEATC = v => v>=1 ? "#2E9E5B" : v>=0.5 ? "#E0A21B" : "#D64532";
+function heatHTML(){
+  if(!window.L) return "";
+  const m=S.hmode||"calles"; const bar=BAR.state==="ready";
+  return `<div class="card"><h2 style="font-size:28px">Dónde fallas</h2><p class="muted" style="margin:4px 0 10px;font-size:14px">${m==="calles"?"Tu último resultado en cada calle: verde acierto, ámbar medio acierto, rojo fallo. Las que no has visto no salen.":m==="barrios"?"Tu acierto en cada barrio, de rojo a verde. En gris, los que casi no has visto.":m==="insignias"?"Tus barrios en oro, plata o bronce. Los demás, más o menos sombreados según lo que llevas visto.":m==="grupo"?"Lo que falla todo el grupo junto: cuanto más rojo, más gente la ha fallado la última vez. Son las calles trampa.":m==="novistas"?"Calles que todavía no te han salido nunca, en gris. Así sabes qué zonas no has tocado.":"Cada barrio, del color de su rey."}</p>
+  <div class="seg segwrap" role="group" style="margin-bottom:10px"><button data-hmode="calles" aria-pressed="${m==="calles"}">Mis fallos</button><button data-hmode="grupo" aria-pressed="${m==="grupo"}">Fallos del grupo</button><button data-hmode="novistas" aria-pressed="${m==="novistas"}">Sin ver</button>${bar?`<button data-hmode="insignias" aria-pressed="${m==="insignias"}">Mis insignias</button><button data-hmode="barrios" aria-pressed="${m==="barrios"}">Acierto</button><button data-hmode="reyes" aria-pressed="${m==="reyes"}">Reyes</button>`:""}</div>
+  <div id="hmap" class="bmap" role="img" aria-label="Mapa de aciertos y fallos"></div>
+  ${m==="calles"||m==="barrios"||m==="grupo"?`<div class="legend"><span><i style="background:#D64532"></i>Fallo</span><span><i style="background:#E0A21B"></i>Medio</span><span><i style="background:#2E9E5B"></i>Acierto</span></div>`:""}</div>`;
+}
+let HMAP=null;
+function drawHeat(){
+  if(HMAP){ try{HMAP.remove();}catch{} HMAP=null; }
+  const el=$("#hmap"); if(!el||!window.L) return;
+  const m=HMAP=L.map(el,{scrollWheelZoom:false, zoomAnimation:false, fadeAnimation:false, markerZoomAnimation:false, preferCanvas:true}).setView([39.4699,-0.3763],13);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(m);
+  const mode=S.hmode||"calles", lo=BAR.lo[S.pid]||SRS.lo||{};
+  if(mode==="grupo" || mode==="novistas"){
+    loadGeo().then(()=>{ if(HMAP!==m) return; const rend=L.canvas({padding:.3}); const ps=playerList().map(p=>BAR.lo[p.id]||{});
+      for(const id of BYBLOCK.C||[]){ const it=ITEMS[id]; let col, w=3;
+        if(mode==="novistas"){ if(lo[id]!=null) continue; col="#7A8794"; w=3; }
+        else { let n=0,sum=0; for(const l of ps){ const v=l[id]; if(v!=null){ n++; sum+=v; } } if(!n) continue; const v=sum/n; col=HEATC(v>=0.99?1:v>=0.6?0.5:0); w=v>=0.99?2:5; }
+        const lines=streetLines(it[9]);
+        if(lines) lines.forEach(l=>L.polyline(l,{renderer:rend,color:col,weight:w,opacity:.85}).bindTooltip(it[1]).addTo(m));
+        else if(it[5]!=null) L.circleMarker([it[5],it[6]],{renderer:rend,radius:3,color:col,fillColor:col,fillOpacity:1,weight:1}).bindTooltip(it[1]).addTo(m);
+      } });
+    return;
+  }
+  if(mode==="calles"){
+    loadGeo().then(()=>{ if(HMAP!==m) return; const rend=L.canvas({padding:.3});
+      for(const id of BYBLOCK.C||[]){ const v=lo[id]; if(v==null) continue; const it=ITEMS[id]; const lines=streetLines(it[9]);
+        const col=HEATC(v);
+        if(lines) lines.forEach(l=>L.polyline(l,{renderer:rend,color:col,weight:v>=1?3:5,opacity:.9}).bindTooltip(it[1]).addTo(m));
+        else if(it[5]!=null) L.circleMarker([it[5],it[6]],{renderer:rend,radius:4,color:col,fillColor:col,fillOpacity:1,weight:1}).bindTooltip(it[1]).addTo(m);
+      } });
+    return;
+  }
+  if(BAR.state!=="ready") return;
+  const all=[];
+  for(const b of BAR.list){
+    let col="#9AA7B3", op=.12, tip=b.name;
+    if(mode==="barrios"){ const Lv=levelOf(b.items,lo); if(Lv.a>=5){ const t=Math.max(0,Math.min(1,(Lv.acc-0.5)/0.5)); col=`hsl(${Math.round(t*120)},65%,45%)`; op=.25+.4*Math.min(1,Lv.cov*1.5); } tip=`${b.name} · ${Lv.a?pct(Lv.acc):"sin datos"} · visto ${pct(Lv.cov)}`; }
+    else if(mode==="insignias"){ const Lv=levelOf(b.items,lo); col=LVLC[Lv.lvl]; op=Lv.lvl?.6:.08+.3*Lv.cov; tip=`${b.name} · ${Lv.lvl?LVL[Lv.lvl]:"visto "+pct(Lv.cov)}`; }
+    else { const K=kingOf(b.items); if(K){ col=colorOf(K.pid); op=.55; tip=`${b.name} · ♛ ${aliasOf(K.pid)}`; } }
+    const latlngs=b.polys.map(p=>p.map(r=>r.map(([x,y])=>[y,x])));
+    const pg=L.polygon(latlngs,{color:"#15212C",weight:1,fillColor:col,fillOpacity:op}).addTo(m);
+    pg.bindTooltip(tip,{sticky:true}); pg.on("click",()=>{ S.barSel=b.id; render(); setTimeout(()=>{ const d=$("#bclose"); if(d) d.scrollIntoView({block:"center"}); },50); });
+    all.push(...latlngs[0][0]);
+  }
+  if(all.length) m.fitBounds(L.latLngBounds(all),{padding:[10,10],animate:false});
+}
+function zonasHTML(){
+  if(BAR.state==="idle") loadBarrios();
+  if(S.pid && SRS.loaded) BAR.lo[S.pid]=SRS.lo;
+  if(!BAR.fr.length && ITEMS.length) BAR.fr=frontierGroups();
+  loadAllLo(false);
+  let h=offlineNote()+heatHTML();
+  if(BAR.state==="ready" && S.barSel && BAR.byId[S.barSel]) h+=barDetailHTML(BAR.byId[S.barSel]);
+  h+=vitrinaHTML();
+  if(BAR.state==="ready") h+=barriosHTML();
+  else if(BAR.state==="missing") h+=`<div class="card"><h3 style="font-size:22px">Faltan los barrios</h3><p class="muted" style="margin:6px 0 0">El mapa de calles, la vitrina de fronteras y el guardián ya funcionan. Para los barrios (escudos, reyes y distritos) hace falta subir a GitHub el archivo <b>barrios.geojson</b>.</p></div>`;
+  else h+=`<div class="card"><p class="muted" style="margin:0">Cargando barrios…</p></div>`;
+  h+=fronterasHTML();
+  return h;
+}
+function fronterasHTML(){
+  if(!BAR.fr.length) return ""; const me=S.pid;
+  return `<div class="card"><h3 style="font-size:22px">Guardián de la frontera</h3><p class="muted" style="margin:4px 0 10px;font-size:14px">Calles pegadas al límite entre dos parques, las que más se fallan. Mismas reglas que los barrios.</p><div class="fails">${BAR.fr.map(f=>{ const Lv=levelOf(f.items,BAR.lo[me]); const K=kingOf(f.items); return `<div class="f"><span><span class="ans" style="--pc:var(--p${f.a})"><i></i>${PSHORT[f.a]}</span> – <span class="ans" style="--pc:var(--p${f.b})"><i></i>${PSHORT[f.b]}</span> <span class="muted">· ${f.items.length} calles</span></span><span>${Lv.lvl?badge(Lv.lvl):`<span class="muted">${pct(Lv.acc)} · visto ${pct(Lv.cov)}</span>`}${K?` <span class="muted">🛡 ${esc(aliasOf(K.pid))}</span>`:""}</span></div>`; }).join("")}</div></div>`;
+}
+let BEMAP=null, BEIDX=-1;
+function drawBeast(id){
+  const el=$("#beastmap"); if(!el||!window.L) return;
+  if(!BEMAP || !document.body.contains(BEMAP.getContainer())){ BEMAP=L.map(el,{scrollWheelZoom:false, zoomAnimation:false, fadeAnimation:false, markerZoomAnimation:false}); L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(BEMAP); BEMAP._lay=L.layerGroup().addTo(BEMAP); }
+  const m=BEMAP, it=ITEMS[id]; m._lay.clearLayers();
+  loadGeo().then(()=>{ if(BEMAP!==m) return; const pk=Array.isArray(it[3])?it[3][0]:it[3]; const col=parkColor(pk); const lines=streetLines(it[9]); const pts=[];
+    if(lines) lines.forEach(l=>{ L.polyline(l,{color:"#fff",weight:12,opacity:.85}).addTo(m._lay); L.polyline(l,{color:col,weight:7}).addTo(m._lay); pts.push(...l); });
+    if(it[5]!=null && (!lines || it[0]!=="C")){ L.circleMarker([it[5],it[6]],{radius:8,color:"#fff",weight:3,fillColor:lines?"#15212C":col,fillOpacity:1}).addTo(m._lay); pts.push([it[5],it[6]]); }
+    if(pts.length) m.fitBounds(L.latLngBounds(pts),{padding:[24,24],maxZoom:17,animate:false}); });
+}
+function bindBeasts(){
+  const car=$("#bcar"); if(!car){ BEMAP=null; return; }
+  const cards=[...car.querySelectorAll(".bcard")]; if(!cards.length) return;
+  BEMAP=null; BEIDX=-1;
+  const upd=()=>{ const w=cards[0].offsetWidth+10; const i=Math.max(0,Math.min(cards.length-1,Math.round(car.scrollLeft/w))); if(i===BEIDX) return; BEIDX=i; const pos=$("#bpos"); if(pos) pos.textContent=`${i+1} de ${cards.length}`; drawBeast(+cards[i].dataset.bi); };
+  let t=null; car.addEventListener("scroll",()=>{ clearTimeout(t); t=setTimeout(upd,90); }, {passive:true});
+  const prev=$("#bprev"), next=$("#bnext"); const step=d=>car.scrollBy({left:d*(cards[0].offsetWidth+10),behavior:"smooth"});
+  if(prev) prev.addEventListener("click",()=>step(-1)); if(next) next.addEventListener("click",()=>step(1));
+  upd();
+}
+
 // ----- QUIZ -----
 function startQuiz(mode, ids){
   S.quiz = {mode, ids, i:0, sel:{p:null,a:null,multi:new Set()}, answered:false, results:[], seen:new Set(), req:new Set(), newSet:new Set(), t0:performance.now(), prev: mode==="surv"?survBest(S.pid):0};
   if(mode==="daily"){
     const dy = myDays()[today()]?.dy;
     if(dy?.ans?.length){ S.quiz.i = dy.ans.length; S.quiz.results = dy.ans.map(a=>Array.isArray(a)?{id:a[0],sc:a[1]}:{id:a.i,sc:a.s}); }
-    else if(S.db && S.pid) mutateDay(today(), d=>{ d.dy = {ans:[],pts:0,ms:0,done:false,start:Date.now()}; });
+    else if(S.db && S.pid) mutateDay(today(), d=>{ d.dy = {ans:[],pts:0,ms:0,done:false,start:Date.now(),n:ids.length}; });
   }
   render();
 }
@@ -1089,7 +1396,7 @@ function quizHTML(){
   if(q.i>=q.ids.length) return summaryHTML();
   const id = q.ids[q.i], it = ITEMS[id];
   const multi = Array.isArray(it[3]), hasA = !multi && it[4]>=0;
-  const title = q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="srs"?"Repaso":q.mode==="duel"?"Duelo 1 vs 1":q.mode==="surv"?"Supervivencia":"Entreno libre";
+  const title = q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="srs"?"Repaso":q.mode==="duel"?"Duelo 1 vs 1":q.mode==="barrio"?"Práctica de barrio":q.mode==="surv"?"Supervivencia":"Entreno libre";
   const got = q.results.reduce((s,r)=>s+r.sc,0);
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got)} pts</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
@@ -1144,7 +1451,8 @@ function answer(){
   if(S.db && S.pid){
     mutateDay(today(), d=>{
       if(q.mode==="daily"){
-        d.dy = d.dy || {ans:[],pts:0,ms:0,done:false,start:Date.now()};
+        d.dy = d.dy || {ans:[],pts:0,ms:0,done:false,start:Date.now(),n:q.ids.length};
+        if(!d.dy.n) d.dy.n = q.ids.length;
         d.dy.ans.push({i:id,s:sc,t:ms}); d.dy.pts += sc; d.dy.ms += ms;
         if(d.dy.ans.length>=q.ids.length){ d.dy.done = true; d.dy.end = Date.now(); }
       } else {
@@ -1158,6 +1466,7 @@ function answer(){
   }
   if(q.mode==="srs"){ if(!q.seen.has(id)){ q.seen.add(id); if(q.newSet.has(id)){ if(SRS.nd!==today()){ SRS.nd=today(); SRS.nn=0; } SRS.nn++; } srsAnswer(id, sc, true); } }
   else srsAnswer(id, sc, false);
+  if(SRS.loaded && S.pid && !Array.isArray(it[3]) && q.mode!=="barrio"){ SRS.lo[id]=sc; srsSaveLazy(); }
   render();
 }
 function mapHTML(it){
@@ -1173,7 +1482,7 @@ function drawMap(){
   if(MAP){ try{ MAP.remove(); }catch{} MAP = null; }
   const el = $("#qmap"); if(!el || !window.L) return;
   const ll = el.dataset.lat ? [+el.dataset.lat, +el.dataset.lng] : null, cv = el.dataset.cv, isC = el.dataset.c==="1";
-  const m = MAP = L.map(el, {scrollWheelZoom:false}).setView(ll||[39.4699,-0.3763], ll?15:13);
+  const m = MAP = L.map(el, {scrollWheelZoom:false, zoomAnimation:false, fadeAnimation:false, markerZoomAnimation:false}).setView(ll||[39.4699,-0.3763], ll?15:13);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(m);
   const dot = (p,c)=>L.circleMarker(p, {radius:8, color:"#fff", weight:3, fillColor:c, fillOpacity:1}).addTo(m);
   if(!cv){ if(ll) dot(ll,parkColor(+el.dataset.pk||0)); return; }
@@ -1182,7 +1491,7 @@ function drawMap(){
     const col=parkColor(+el.dataset.pk||0);
     const pts=[]; lines.forEach(l=>{ L.polyline(l,{color:"#fff",weight:12,opacity:.85}).addTo(m); L.polyline(l,{color:col,weight:7,opacity:1}).addTo(m); pts.push(...l); });
     if(!isC && ll){ dot(ll,"#15212C"); pts.push(ll); }
-    m.fitBounds(L.latLngBounds(pts),{padding:[24,24],maxZoom:17});
+    m.fitBounds(L.latLngBounds(pts),{padding:[24,24],maxZoom:17,animate:false});
   });
 }
 function next(){ const q=S.quiz; if(q.mode==="srs" && q.results.length && q.results[q.results.length-1].sc<1 && !q.req.has(q.ids[q.i])){ q.req.add(q.ids[q.i]); q.ids.push(q.ids[q.i]); } if(q.mode==="surv" && q.results.length && q.results[q.results.length-1].sc<1){ q.i=q.ids.length; q.answered=false; render(); return; } q.i++; q.answered=false; q.vp=null; q.sel={p:null,a:null,multi:new Set()}; q.t0=performance.now(); render(); }
@@ -1194,6 +1503,15 @@ function bindView(){
   on("#startFails", ()=>{ const s=[...pendingFails()]; startQuiz("fails", sample(s, Math.min(20,s.length), Math.random)); });
   on("#nextQ", next);
   on("#startSrs", startSrs);
+  on("#duelsAll", ()=>{ S.duelsAll=!S.duelsAll; render(); });
+  document.querySelectorAll("[data-hmode]").forEach(b=>b.addEventListener("click",()=>{ S.hmode=b.dataset.hmode; render(); }));
+  drawHeat(); bindBeasts();
+  document.querySelectorAll("[data-rmode]").forEach(b=>b.addEventListener("click",()=>{ S.rankMode=b.dataset.rmode; render(); }));
+  document.querySelectorAll("[data-bview]").forEach(b=>b.addEventListener("click",()=>{ S.bview=b.dataset.bview; render(); }));
+  document.querySelectorAll("[data-bsel]").forEach(b=>b.addEventListener("click",()=>{ S.barSel=b.dataset.bsel; render(); window.scrollTo({top:0}); }));
+  on("#bclose", ()=>{ S.barSel=null; render(); });
+  document.querySelectorAll("[data-bprac]").forEach(b=>b.addEventListener("click",()=>{ const B=BAR.byId[b.dataset.bprac]; if(!B) return; S.view="libre"; startQuiz("barrio", sample(activePool(B.items), Math.min(20,B.items.length), Math.random)); }));
+  drawBarMap();
   document.querySelectorAll("[data-flag]").forEach(b=>b.addEventListener("click",()=>toggleFlag(+b.dataset.flag)));
   document.querySelectorAll("[data-unflag]").forEach(b=>b.addEventListener("click",()=>recoverFlag(+b.dataset.unflag)));
   on("#backup", doBackup);
@@ -1285,7 +1603,7 @@ function subscribeDays(pid){
     }
     if(pid===S.pid) for(const ds in local) if(!next[ds]) next[ds] = local[ds];
     S.days[pid] = next;
-    if(pid===S.pid){ S.myDaysLoaded = true; srsSeed(); }
+    if(pid===S.pid){ S.myDaysLoaded = true; srsSeed(); loSeed(); }
     if((!S.quiz || S.view==="rank") && !(S.route && S.view==="rutas")) render();
   }, ()=>{});
 }
@@ -1313,7 +1631,7 @@ async function initDb(){
 // ---------- boot ----------
 applyColors();
 fetch("data.json?v="+DATA_V).then(r=>r.json()).then(data=>{
-  ITEMS = data.items; BYBLOCK = {};
+  ITEMS = data.items; BYBLOCK = {}; DATA_BASE = data.base || ITEMS.length;
   ITEMS.forEach((it,i)=>{ (BYBLOCK[it[0]] ||= []).push(i); });
   render();
   if(window.claude && typeof window.claude.use==="function") initDb().catch(()=>{ S.dbChecked=true; render(); });
