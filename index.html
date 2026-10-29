@@ -691,14 +691,14 @@ function srsRef(){ return S.db && S.pid ? S.db.doc(`players/${S.pid}/srs/main`) 
 function ensureSrs(){ if(S.db && S.pid && SRS.pidSub!==S.pid){ SRS.pidSub=S.pid; srsSubscribe(); } }
 function srsSubscribe(){
   if(SRS.sub){ try{SRS.sub();}catch{} SRS.sub=null; }
-  SRS.loaded=false; SRS.c={}; SRS.lo={}; SRS.cfg={n:10,b:["C"]}; SRS.nd=""; SRS.nn=0;
+  SRS.loaded=false; SRS.c={}; SRS.lo={}; SRS.h={}; SRS.cfg={n:10,b:["C"]}; SRS.nd=""; SRS.nn=0;
   const ref=srsRef(); if(!ref) return;
   SRS.sub = ref.onSnapshot(snap=>{
     if(SRS.busy || SRS.dirty) return;
     const v = snap.exists ? snap.data() : null;
-    if(v){ SRS.lo={...(v.lo||{})}; SRS.c={...(v.c||{})}; SRS.cfg={n:10,b:["C"],...(v.cfg||{})}; SRS.nd=v.nd||""; SRS.nn=v.nn||0; }
+    if(v){ SRS.lo={...(v.lo||{})}; SRS.h={...(v.h||{})}; SRS.c={...(v.c||{})}; SRS.cfg={n:10,b:["C"],...(v.cfg||{})}; SRS.nd=v.nd||""; SRS.nn=v.nn||0; }
     const first = !SRS.loaded; SRS.loaded=true;
-    if(first){ srsSeed(); loSeed(); srsSpread(); }
+    if(first){ srsSeed(); loSeed(); hSeed(); srsSpread(); }
     if(!S.quiz && !(S.route && S.view==="rutas")) render();
   }, e=>{ SRS.loaded=true; srsError(e); });
 }
@@ -717,13 +717,32 @@ function loSeed(){
   }
   SRS.cfg.lo1=1; srsSave();
 }
+const hCh = sc => sc>=1?"1":sc>=0.5?"m":"0";
+function hPush(id,sc){ SRS.h[id]=((SRS.h[id]||"")+hCh(sc)).slice(-3); }
+// Últimas 3 respuestas por calle, reconstruidas una vez con todo lo guardado: retos, fallos, duelos y repaso.
+function hSeed(){
+  if(!SRS.loaded || !S.myDaysLoaded || !S.duelsLoaded || SRS.cfg.h1) return;
+  const ev=[]; const days=myDays();
+  for(const ds of Object.keys(days)){ const d=days[ds], t0=Date.parse(ds+"T00:00:00Z");
+    (d.dy?.ans||[]).forEach((a,k)=>{ const id=Array.isArray(a)?a[0]:a.i, sc=Array.isArray(a)?a[1]:a.s; if(id!=null) ev.push([t0+k,id,sc]); });
+    const o=d.o||{}; for(const k in o) ev.push([t0+80000000,+k,o[k]===1?1:0]); }
+  for(const D of (S.duels||[])) for(const sd of ["ra","rb"]){ if((sd==="ra"?D.a:D.b)!==S.pid) continue; const r=D[sd]; const t0=r?.end||D.c||0; (r?.ans||[]).forEach((a,k)=>ev.push([t0+k,a.i,a.s])); }
+  ev.sort((a,b)=>a[0]-b[0]);
+  const h={}; for(const [,id,sc] of ev){ h[id]=((h[id]||"")+hCh(sc)).slice(-3); }
+  for(const k in SRS.c){ const c=srsGet(k); if(c && c.r>0 && !h[k]) h[k]="1"; }
+  for(const k in SRS.lo) if(!h[k]) h[k]=hCh(SRS.lo[k]);
+  for(const k in SRS.h) h[k]=(((h[k]||"")+SRS.h[k])).slice(-3);
+  SRS.h=h;
+  for(const k in h) if(SRS.lo[k]==null){ const ch=h[k].slice(-1); SRS.lo[k]= ch==="1"?1:ch==="m"?0.5:0; }
+  SRS.cfg.h1=1; srsSave();
+}
 function srsSaveLazy(){ SRS.dirty=true; if(SRS.timer) return; SRS.timer=setTimeout(()=>{ SRS.timer=null; srsFlush(); }, 4000); }
 function srsSave(){ SRS.dirty=true; clearTimeout(SRS.timer); SRS.timer=setTimeout(()=>{ SRS.timer=null; srsFlush(); }, 800); }
 async function srsFlush(){
   const ref=srsRef(); if(!ref || !S.canWrite){ SRS.dirty=false; return; }
   if(SRS.busy){ SRS.timer=setTimeout(srsFlush,500); return; }
   SRS.busy=true; SRS.dirty=false;
-  try{ await ref.set({c:SRS.c, lo:SRS.lo||{}, cfg:SRS.cfg, nd:SRS.nd, nn:SRS.nn, u:Date.now()}); }catch(e){ srsError(e); }
+  try{ await ref.set({c:SRS.c, lo:SRS.lo||{}, h:SRS.h||{}, cfg:SRS.cfg, nd:SRS.nd, nn:SRS.nn, u:Date.now()}); }catch(e){ srsError(e); }
   SRS.busy=false;
 }
 function srsError(e){ try{console.error("Repaso",e);}catch{} S.writeError="No se ha podido guardar el repaso. En la web de GitHub, revisa que has pegado las reglas nuevas en Firebase (Firestore → Reglas)."; render(); }
@@ -898,7 +917,7 @@ function subscribeDuels(){
     for(const d of snap.docs){ const v=d.data(); if(!v||!v.ids) continue; const D=JSON.parse(JSON.stringify(v)); D.id=d.id;
       const o=old[d.id]; if(o) for(const sd of ["ra","rb"]) if((o[sd]?.ans?.length||0)>(D[sd]?.ans?.length||0)) D[sd]=o[sd];
       byId[d.id]=D; list.push(D); }
-    S.duelsById=byId; S.duels=list;
+    S.duelsById=byId; S.duels=list; if(!S.duelsLoaded){ S.duelsLoaded=true; hSeed(); }
     if(!S.quiz && !(S.route && S.view==="rutas")) render();
   }, ()=>{});
 }
@@ -1194,7 +1213,7 @@ async function loadAllLo(force){
 function levelOf(items, lo){
   const ex=flaggedSet(Date.now()+1); let n=0,a=0,sum=0;
   for(const i of items){ if(ex.has(i)) continue; n++; const v=lo?.[i]; if(v!=null){ a++; sum+=v; } }
-  const cov=n?a/n:0, acc=a?sum/a:0; let lvl=0; if(cov>=0.8){ if(acc>=0.95) lvl=3; else if(acc>=0.85) lvl=2; else if(acc>=0.7) lvl=1; }
+  const cov=n?a/n:0, acc=a?sum/a:0; let lvl=0; if(cov>=0.75){ if(acc>=0.95) lvl=3; else if(acc>=0.85) lvl=2; else if(acc>=0.7) lvl=1; }
   return {n,a,cov,acc,lvl};
 }
 function kingOf(items){ let best=null; for(const p of playerList()){ const L=levelOf(items,BAR.lo[p.id]); if(!L.lvl) continue; if(!best||L.acc>best.L.acc||(L.acc===best.L.acc&&L.cov>best.L.cov)) best={pid:p.id,L}; } return best; }
@@ -1208,7 +1227,7 @@ function barriosHTML(){
   if(S.pid && SRS.loaded) BAR.lo[S.pid]=SRS.lo; loadAllLo(false);
   const me=S.pid, ps=playerList();
   const rows=BAR.list.map(b=>({b,L:levelOf(b.items,BAR.lo[me]),K:kingOf(b.items)}));
-  let h=`<div class="card"><h2 style="font-size:28px">Insignias por barrio</h2><p class="muted" style="margin:4px 0 10px;font-size:14px">Cuenta la última vez que respondiste cada calle, en cualquier modo, sin saber de qué barrio era. Para optar a insignia hay que haber respondido el 80 % de las calles del barrio. Bronce desde el 70 % de acierto, plata desde el 85 %, oro desde el 95 %. Solo calidad: hacer más preguntas no sube la nota.</p>`;
+  let h=`<div class="card"><h2 style="font-size:28px">Insignias por barrio</h2><p class="muted" style="margin:4px 0 10px;font-size:14px">Cuenta la última vez que respondiste cada calle, en cualquier modo, sin saber de qué barrio era. Para optar a insignia hay que haber respondido el 75 % de las calles del barrio. Cada calle cuenta en un solo barrio: en el que está su punto en el mapa del Ayuntamiento. Bronce desde el 70 % de acierto, plata desde el 85 %, oro desde el 95 %. Solo calidad: hacer más preguntas no sube la nota.</p>`;
   const cnt=[0,0,0,0]; rows.forEach(r=>cnt[r.L.lvl]++); const crowns=rows.filter(r=>r.K&&r.K.pid===me).length;
   h+=`<div class="grid2"><div class="stat"><span class="eyebrow">Oros</span><span class="num" style="color:${LVLC[3]}">${cnt[3]}</span></div><div class="stat"><span class="eyebrow">Platas</span><span class="num">${cnt[2]}</span></div><div class="stat"><span class="eyebrow">Bronces</span><span class="num" style="color:${LVLC[1]}">${cnt[1]}</span></div><div class="stat"><span class="eyebrow">Coronas</span><span class="num">♛ ${crowns}</span></div></div></div>`;
   // ranking
@@ -1284,35 +1303,50 @@ function shieldSVG(lvl, c1, c2, mono, stars){
 function monoOf(name){ const w=name.replace(/['’]/g," ").split(/\s+/).filter(x=>x && !/^(de|del|la|el|les|els|l|d|i|y)$/i.test(x)); return (w.length>1? w[0][0]+w[1][0] : (w[0]||"?").slice(0,2)).toUpperCase(); }
 function topParks(items){ const c={}; for(const i of items){ const k=ITEMS[i][3]; if(typeof k==="number") c[k]=(c[k]||0)+1; } const s=Object.entries(c).sort((a,b)=>b[1]-a[1]).map(x=>+x[0]); return [s[0]??0, s[1]??s[0]??0]; }
 function vitrinaHTML(){
-  const me=S.pid, lo=BAR.lo[me]||SRS.lo||{}; const sh=[];
+  const me=vitPid(), lo=BAR.lo[me]||(me===S.pid?SRS.lo:{})||{}; const sh=[];
   if(BAR.state==="ready") for(const b of BAR.list){ const L=levelOf(b.items,lo); const [p1,p2]=topParks(b.items); sh.push({id:b.id, name:b.name, L, svg:shieldSVG(L.lvl,parkColor(p1),parkColor(p2),monoOf(b.name),L.lvl)}); }
   for(const f of BAR.fr){ const L=levelOf(f.items,lo); sh.push({id:"", name:`Frontera ${PSHORT[f.a]}–${PSHORT[f.b]}`, L, svg:shieldSVG(L.lvl,parkColor(f.a),parkColor(f.b),PSHORT[f.a][0]+PSHORT[f.b][0],L.lvl)}); }
   if(!sh.length) return "";
   sh.sort((a,b)=>b.L.lvl-a.L.lvl||b.L.cov-a.L.cov);
   const got=sh.filter(x=>x.L.lvl).length;
-  return `<div class="card"><div class="spread"><h3 style="font-size:24px">Vitrina de escudos</h3><span class="muted" style="font-size:14px">${got} de ${sh.length} conseguidos</span></div><p class="muted" style="margin:4px 0 12px;font-size:13px">Un escudo por barrio y por frontera. Bronce, plata u oro con una, dos o tres estrellas; en gris los que aún no tienes, con lo que llevas visto.</p><div class="vitrina">${sh.map(x=>`<button class="vit" ${x.id?`data-bsel="${esc(x.id)}"`:"disabled"}>${x.svg}<span class="vn">${esc(x.name)}</span><span class="muted vs">${x.L.lvl?LVL[x.L.lvl]:`visto ${pct(x.L.cov)}`}</span></button>`).join("")}</div></div>`;
+  return `<div class="card"><div class="spread"><h3 style="font-size:24px">Vitrina de escudos${me!==S.pid?` de ${esc(aliasOf(me))}`:""}</h3><span class="muted" style="font-size:14px">${got} de ${sh.length} conseguidos</span></div><p class="muted" style="margin:4px 0 12px;font-size:13px">Un escudo por barrio y por frontera. Bronce, plata u oro con una, dos o tres estrellas; en gris los que aún no tienes, con lo que llevas visto.</p>${playerList().length>1?vitPicker():""}<div class="vitrina">${sh.map(x=>`<button class="vit" ${x.id?`data-bsel="${esc(x.id)}"`:"disabled"}>${x.svg}<span class="vn">${esc(x.name)}</span><span class="muted vs">${x.L.lvl?LVL[x.L.lvl]:`visto ${pct(x.L.cov)}`}</span></button>`).join("")}</div></div>`;
 }
 const HEATC = v => v>=1 ? "#2E9E5B" : v>=0.5 ? "#E0A21B" : "#D64532";
+const HSTATE = h => !h ? null : h==="111" ? "dom" : !h.includes("1") ? "mal" : /^1+$/.test(h) ? "bien" : "baila";
+const HSC = {mal:"#D64532", baila:"#E0A21B", bien:"#8CCB9E", dom:"#2E9E5B"};
+function vitPid(){ const ps=playerList(); return ps.some(p=>p.id===S.vitP) ? S.vitP : S.pid; }
 function heatHTML(){
   if(!window.L) return "";
-  const m=S.hmode||"calles"; const bar=BAR.state==="ready";
-  return `<div class="card"><h2 style="font-size:28px">Dónde fallas</h2><p class="muted" style="margin:4px 0 10px;font-size:14px">${m==="calles"?"Tu último resultado en cada calle: verde acierto, ámbar medio acierto, rojo fallo. Las que no has visto no salen.":m==="barrios"?"Tu acierto en cada barrio, de rojo a verde. En gris, los que casi no has visto.":m==="insignias"?"Tus barrios en oro, plata o bronce. Los demás, más o menos sombreados según lo que llevas visto.":m==="grupo"?"Lo que falla todo el grupo junto: cuanto más rojo, más gente la ha fallado la última vez. Son las calles trampa.":m==="novistas"?"Calles que todavía no te han salido nunca, en gris. Así sabes qué zonas no has tocado.":"Cada barrio, del color de su rey."}</p>
-  <div class="seg segwrap" role="group" style="margin-bottom:10px"><button data-hmode="calles" aria-pressed="${m==="calles"}">Mis fallos</button><button data-hmode="grupo" aria-pressed="${m==="grupo"}">Fallos del grupo</button><button data-hmode="novistas" aria-pressed="${m==="novistas"}">Sin ver</button>${bar?`<button data-hmode="insignias" aria-pressed="${m==="insignias"}">Mis insignias</button><button data-hmode="barrios" aria-pressed="${m==="barrios"}">Acierto</button><button data-hmode="reyes" aria-pressed="${m==="reyes"}">Reyes</button>`:""}</div>
+  const bar=BAR.state==="ready"; let m=S.hmode||"calles"; if(!bar && !["calles","novistas"].includes(m)) m="calles";
+  const vp=vitPid(), vn=vp===S.pid?"Tus":"De "+esc(aliasOf(vp))+":";
+  let cnt="";
+  if(m==="calles"){ const c={mal:0,baila:0,bien:0,dom:0}; for(const id of BYBLOCK.C||[]){ const st=HSTATE(SRS.h[id]); if(st) c[st]++; } cnt=`<div class="legend"><span><i style="background:${HSC.mal}"></i>Mal: ${c.mal}</span><span><i style="background:${HSC.baila}"></i>Bailan: ${c.baila}</span>${S.hgreen?`<span><i style="background:${HSC.bien}"></i>Bien, sin confirmar: ${c.bien}</span><span><i style="background:${HSC.dom}"></i>Dominadas: ${c.dom}</span>`:""}</div><button class="linkbtn" id="hgreen" style="margin-top:6px">${S.hgreen?"Ocultar las que aciertas":`Ver también las que aciertas (${c.bien+c.dom})`}</button>`; }
+  const txt = m==="calles" ? "Tus 3 últimas respuestas de cada calle. Rojo: ningún acierto. Ámbar: unas sí y otras no. Una calle está dominada con 3 aciertos seguidos; esas no se pintan para que veas solo lo que te queda."
+    : m==="grupo" ? (()=>{ const n=playerList().filter(p=>Object.keys(BAR.lo[p.id]||{}).length).length; return `Acierto de todo el grupo junto en cada barrio, de rojo a verde: las zonas trampa. <b>Con datos: ${n} de ${playerList().length}.</b>${n<=1?" De momento solo estás tú: cada compañero se suma la primera vez que abra la app nueva.":""}`; })()
+    : m==="barrios" ? "Tu acierto en cada barrio, de rojo a verde. En gris, los que casi no has visto."
+    : m==="insignias" ? `${vn} barrios en oro, plata o bronce. Los demás, más o menos sombreados según lo visto.`
+    : m==="novistas" ? "Calles que todavía no te han salido nunca, en gris."
+    : "Cada barrio, del color de su rey.";
+  const B=(k,t)=>`<button data-hmode="${k}" aria-pressed="${m===k}">${t}</button>`;
+  return `<div class="card"><h2 style="font-size:28px">Dónde fallas</h2><p class="muted" style="margin:4px 0 10px;font-size:14px">${txt}</p>
+  <div class="seg segwrap" role="group" style="margin-bottom:10px">${B("calles","Mis fallos")}${bar?B("grupo","Fallos del grupo"):""}${B("novistas","Sin ver")}${bar?B("insignias","Insignias")+B("barrios","Acierto")+B("reyes","Reyes"):""}</div>
+  ${m==="insignias"?vitPicker():""}
   <div id="hmap" class="bmap" role="img" aria-label="Mapa de aciertos y fallos"></div>
-  ${m==="calles"||m==="barrios"||m==="grupo"?`<div class="legend"><span><i style="background:#D64532"></i>Fallo</span><span><i style="background:#E0A21B"></i>Medio</span><span><i style="background:#2E9E5B"></i>Acierto</span></div>`:""}</div>`;
+  ${m==="calles"?cnt:""}${m==="barrios"||m==="grupo"?`<div class="legend"><span><i style="background:hsl(0,65%,45%)"></i>50% o menos</span><span><i style="background:hsl(60,65%,45%)"></i>75%</span><span><i style="background:hsl(120,65%,45%)"></i>100%</span></div>`:""}</div>`;
 }
+function vitPicker(){ const vp=vitPid(); return `<div class="seg segwrap" role="group" style="margin-bottom:10px">${playerList().map(p=>`<button data-vitp="${esc(p.id)}" aria-pressed="${p.id===vp}">${p.id===S.pid?"Yo":esc(p.alias||aliasOf(p.id))}</button>`).join("")}</div>`; }
 let HMAP=null;
 function drawHeat(){
   if(HMAP){ try{HMAP.remove();}catch{} HMAP=null; }
   const el=$("#hmap"); if(!el||!window.L) return;
   const m=HMAP=L.map(el,{scrollWheelZoom:false, zoomAnimation:false, fadeAnimation:false, markerZoomAnimation:false, preferCanvas:true}).setView([39.4699,-0.3763],13);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(m);
-  const mode=S.hmode||"calles", lo=BAR.lo[S.pid]||SRS.lo||{};
-  if(mode==="grupo" || mode==="novistas"){
+  let mode=S.hmode||"calles"; if(BAR.state!=="ready" && !["calles","novistas"].includes(mode)) mode="calles";
+  const lo=(mode==="insignias"?BAR.lo[vitPid()]:BAR.lo[S.pid])||(mode==="insignias"&&vitPid()!==S.pid?{}:SRS.lo)||{};
+  if(mode==="novistas"){
     loadGeo().then(()=>{ if(HMAP!==m) return; const rend=L.canvas({padding:.3}); const ps=playerList().map(p=>BAR.lo[p.id]||{});
       for(const id of BYBLOCK.C||[]){ const it=ITEMS[id]; let col, w=3;
-        if(mode==="novistas"){ if(lo[id]!=null) continue; col="#7A8794"; w=3; }
-        else { let n=0,sum=0; for(const l of ps){ const v=l[id]; if(v!=null){ n++; sum+=v; } } if(!n) continue; const v=sum/n; col=HEATC(v>=0.99?1:v>=0.6?0.5:0); w=v>=0.99?2:5; }
+        if(SRS.lo[id]!=null || SRS.h[id]) continue; col="#7A8794"; w=3;
         const lines=streetLines(it[9]);
         if(lines) lines.forEach(l=>L.polyline(l,{renderer:rend,color:col,weight:w,opacity:.85}).bindTooltip(it[1]).addTo(m));
         else if(it[5]!=null) L.circleMarker([it[5],it[6]],{renderer:rend,radius:3,color:col,fillColor:col,fillOpacity:1,weight:1}).bindTooltip(it[1]).addTo(m);
@@ -1321,9 +1355,9 @@ function drawHeat(){
   }
   if(mode==="calles"){
     loadGeo().then(()=>{ if(HMAP!==m) return; const rend=L.canvas({padding:.3});
-      for(const id of BYBLOCK.C||[]){ const v=lo[id]; if(v==null) continue; const it=ITEMS[id]; const lines=streetLines(it[9]);
-        const col=HEATC(v);
-        if(lines) lines.forEach(l=>L.polyline(l,{renderer:rend,color:col,weight:v>=1?3:5,opacity:.9}).bindTooltip(it[1]).addTo(m));
+      for(const id of BYBLOCK.C||[]){ const st=HSTATE(SRS.h[id]); if(!st || (!S.hgreen && (st==="dom"||st==="bien"))) continue; const it=ITEMS[id]; const lines=streetLines(it[9]);
+        const col=HSC[st], w=st==="mal"?5:st==="baila"?4:3, tip=`${it[1]} · ${[...SRS.h[id]].map(c=>c==="1"?"✓":c==="m"?"½":"✗").join(" ")}`;
+        if(lines) lines.forEach(l=>L.polyline(l,{renderer:rend,color:col,weight:w,opacity:.9}).bindTooltip(tip).addTo(m));
         else if(it[5]!=null) L.circleMarker([it[5],it[6]],{renderer:rend,radius:4,color:col,fillColor:col,fillOpacity:1,weight:1}).bindTooltip(it[1]).addTo(m);
       } });
     return;
@@ -1332,7 +1366,9 @@ function drawHeat(){
   const all=[];
   for(const b of BAR.list){
     let col="#9AA7B3", op=.12, tip=b.name;
-    if(mode==="barrios"){ const Lv=levelOf(b.items,lo); if(Lv.a>=5){ const t=Math.max(0,Math.min(1,(Lv.acc-0.5)/0.5)); col=`hsl(${Math.round(t*120)},65%,45%)`; op=.25+.4*Math.min(1,Lv.cov*1.5); } tip=`${b.name} · ${Lv.a?pct(Lv.acc):"sin datos"} · visto ${pct(Lv.cov)}`; }
+    if(mode==="grupo"){ let a=0,ok=0,worst=null; for(const p of playerList()){ const Lv=levelOf(b.items,BAR.lo[p.id]); if(!Lv.a) continue; a+=Lv.a; ok+=Lv.acc*Lv.a; if(Lv.a>=3 && (!worst||Lv.acc<worst[1])) worst=[p.id,Lv.acc]; }
+      if(a>=5){ const acc=ok/a, t=Math.max(0,Math.min(1,(acc-0.5)/0.5)); col=`hsl(${Math.round(t*120)},65%,45%)`; op=.5; } tip=`${b.name} · grupo ${a?pct(ok/a):"sin datos"}${worst&&playerList().length>1?` · más falla: ${aliasOf(worst[0])}`:""}`; }
+    else if(mode==="barrios"){ const Lv=levelOf(b.items,lo); if(Lv.a>=5){ const t=Math.max(0,Math.min(1,(Lv.acc-0.5)/0.5)); col=`hsl(${Math.round(t*120)},65%,45%)`; op=.25+.4*Math.min(1,Lv.cov*1.5); } tip=`${b.name} · ${Lv.a?pct(Lv.acc):"sin datos"} · visto ${pct(Lv.cov)}`; }
     else if(mode==="insignias"){ const Lv=levelOf(b.items,lo); col=LVLC[Lv.lvl]; op=Lv.lvl?.6:.08+.3*Lv.cov; tip=`${b.name} · ${Lv.lvl?LVL[Lv.lvl]:"visto "+pct(Lv.cov)}`; }
     else { const K=kingOf(b.items); if(K){ col=colorOf(K.pid); op=.55; tip=`${b.name} · ♛ ${aliasOf(K.pid)}`; } }
     const latlngs=b.polys.map(p=>p.map(r=>r.map(([x,y])=>[y,x])));
@@ -1466,7 +1502,7 @@ function answer(){
   }
   if(q.mode==="srs"){ if(!q.seen.has(id)){ q.seen.add(id); if(q.newSet.has(id)){ if(SRS.nd!==today()){ SRS.nd=today(); SRS.nn=0; } SRS.nn++; } srsAnswer(id, sc, true); } }
   else srsAnswer(id, sc, false);
-  if(SRS.loaded && S.pid && !Array.isArray(it[3]) && q.mode!=="barrio"){ SRS.lo[id]=sc; srsSaveLazy(); }
+  if(SRS.loaded && S.pid && !Array.isArray(it[3]) && q.mode!=="barrio"){ SRS.lo[id]=sc; hPush(id,sc); srsSaveLazy(); }
   render();
 }
 function mapHTML(it){
@@ -1505,6 +1541,8 @@ function bindView(){
   on("#startSrs", startSrs);
   on("#duelsAll", ()=>{ S.duelsAll=!S.duelsAll; render(); });
   document.querySelectorAll("[data-hmode]").forEach(b=>b.addEventListener("click",()=>{ S.hmode=b.dataset.hmode; render(); }));
+  document.querySelectorAll("[data-vitp]").forEach(b=>b.addEventListener("click",()=>{ S.vitP=b.dataset.vitp; render(); }));
+  { const g=$("#hgreen"); if(g) g.addEventListener("click",()=>{ S.hgreen=!S.hgreen; render(); }); }
   drawHeat(); bindBeasts();
   document.querySelectorAll("[data-rmode]").forEach(b=>b.addEventListener("click",()=>{ S.rankMode=b.dataset.rmode; render(); }));
   document.querySelectorAll("[data-bview]").forEach(b=>b.addEventListener("click",()=>{ S.bview=b.dataset.bview; render(); }));
@@ -1603,7 +1641,7 @@ function subscribeDays(pid){
     }
     if(pid===S.pid) for(const ds in local) if(!next[ds]) next[ds] = local[ds];
     S.days[pid] = next;
-    if(pid===S.pid){ S.myDaysLoaded = true; srsSeed(); loSeed(); }
+    if(pid===S.pid){ S.myDaysLoaded = true; srsSeed(); loSeed(); hSeed(); }
     if((!S.quiz || S.view==="rank") && !(S.route && S.view==="rutas")) render();
   }, ()=>{});
 }
