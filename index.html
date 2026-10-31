@@ -134,7 +134,7 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .feed .ev>span:nth-child(2){flex:1;min-width:0}
 .feed .t{font-size:12px;white-space:nowrap}
 .mapbox{display:flex;flex-direction:column;gap:6px}
-#qmap{height:230px;border-radius:10px;border:1px solid var(--line);z-index:0}
+#qmap{height:260px;border-radius:10px;border:1px solid var(--line);z-index:0}
 .maplinks{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
 .maplinks a{color:var(--p0);font-weight:600}
 .fc{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end}
@@ -1511,7 +1511,19 @@ function mapHTML(it){
   const url = ll ? `https://www.google.com/maps/search/?api=1&query=${ll[0]},${ll[1]}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it[1]+", València")}`;
   const pk = Array.isArray(it[3]) ? it[3][0] : it[3];
   const label = it[9]!=null ? (it[0]==="C" ? `Trazado oficial, en el color de su parque (${PSHORT[pk]})` : `Su calle, en el color del parque (${PSHORT[pk]}) · el punto es aproximado`) : (it[7]?"Punto aproximado: un punto de la calle, no el portal":"Ubicación de la calle");
-  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${ll?ll[0]:""}" data-lng="${ll?ll[1]:""}" data-cv="${it[9]??""}" data-c="${it[0]==="C"?1:0}" data-pk="${pk}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${label}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div></div>`;
+  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${ll?ll[0]:""}" data-lng="${ll?ll[1]:""}" data-cv="${it[9]??""}" data-c="${it[0]==="C"?1:0}" data-pk="${pk}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${label}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div>${window.L&&ll?`<div class="maplinks"><button class="linkbtn" id="zonasT">${zonasOn()?"Ocultar zonas de los parques":"Ver zonas de los parques alrededor"}</button>${zonasOn()?`<span class="muted">Color de la línea: parque principal · rayas: apoyo</span>`:""}</div>`:""}</div>`;
+}
+function zonasOn(){ if(S.zonas==null){ try{ S.zonas=localStorage.getItem("cbl.zonas")!=="0"; }catch{ S.zonas=true; } } return S.zonas; }
+function drawZonas(m, ll, skipCv){
+  const rend=L.canvas({padding:.5}), dl=0.016, dg=0.021;
+  for(const id of BYBLOCK.C||[]){ const it=ITEMS[id]; if(it[5]==null || Math.abs(it[5]-ll[0])>dl || Math.abs(it[6]-ll[1])>dg) continue;
+    if(String(it[9])===String(skipCv)) continue;
+    const p=Array.isArray(it[3])?it[3][0]:it[3], a=Array.isArray(it[3])?null:it[4]; const lines=streetLines(it[9]);
+    const tip=`${it[1]} · ${PSHORT[p]}${a!=null&&a>=0?"–"+PSHORT[a]:""}`;
+    const cp=parkColor(p), ca=a!=null&&a>=0?parkColor(a):null;
+    if(lines) lines.forEach(l=>{ L.polyline(l,{renderer:rend,color:cp,weight:5,opacity:.75}).bindTooltip(tip).addTo(m); if(ca&&a!==p) L.polyline(l,{renderer:rend,color:ca,weight:5,opacity:.95,dashArray:"3 9",lineCap:"butt"}).bindTooltip(tip).addTo(m); });
+    else L.circleMarker([it[5],it[6]],{renderer:rend,radius:4,color:ca||cp,weight:2,fillColor:cp,fillOpacity:.9}).bindTooltip(tip).addTo(m);
+  }
 }
 let MAP = null;
 function drawMap(){
@@ -1521,13 +1533,16 @@ function drawMap(){
   const m = MAP = L.map(el, {scrollWheelZoom:false, zoomAnimation:false, fadeAnimation:false, markerZoomAnimation:false}).setView(ll||[39.4699,-0.3763], ll?15:13);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(m);
   const dot = (p,c)=>L.circleMarker(p, {radius:8, color:"#fff", weight:3, fillColor:c, fillOpacity:1}).addTo(m);
-  if(!cv){ if(ll) dot(ll,parkColor(+el.dataset.pk||0)); return; }
-  loadGeo().then(()=>{ if(MAP!==m) return; const lines=streetLines(cv);
+  const zon = ll && zonasOn();
+  if(!cv && !zon){ if(ll) dot(ll,parkColor(+el.dataset.pk||0)); return; }
+  loadGeo().then(()=>{ if(MAP!==m) return; if(zon) drawZonas(m, ll, cv);
+    if(!cv){ dot(ll,parkColor(+el.dataset.pk||0)); m.setView(ll,15,{animate:false}); return; }
+    const lines=streetLines(cv);
     if(!lines){ if(ll) dot(ll,"#C42A1C"); return; }
     const col=parkColor(+el.dataset.pk||0);
-    const pts=[]; lines.forEach(l=>{ L.polyline(l,{color:"#fff",weight:12,opacity:.85}).addTo(m); L.polyline(l,{color:col,weight:7,opacity:1}).addTo(m); pts.push(...l); });
+    const pts=[]; lines.forEach(l=>{ L.polyline(l,{color:zon?"#15212C":"#fff",weight:13,opacity:zon?.9:.85}).addTo(m); L.polyline(l,{color:col,weight:7,opacity:1}).addTo(m); pts.push(...l); });
     if(!isC && ll){ dot(ll,"#15212C"); pts.push(ll); }
-    m.fitBounds(L.latLngBounds(pts),{padding:[24,24],maxZoom:17,animate:false});
+    m.fitBounds(L.latLngBounds(pts),{padding:[24,24],maxZoom:zon?15:17,animate:false});
   });
 }
 function next(){ const q=S.quiz; if(q.mode==="srs" && q.results.length && q.results[q.results.length-1].sc<1 && !q.req.has(q.ids[q.i])){ q.req.add(q.ids[q.i]); q.ids.push(q.ids[q.i]); } if(q.mode==="surv" && q.results.length && q.results[q.results.length-1].sc<1){ q.i=q.ids.length; q.answered=false; render(); return; } q.i++; q.answered=false; q.vp=null; q.sel={p:null,a:null,multi:new Set()}; q.t0=performance.now(); render(); }
@@ -1538,6 +1553,7 @@ function bindView(){
   on("#startFree", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); });
   on("#startFails", ()=>{ const s=[...pendingFails()]; startQuiz("fails", sample(s, Math.min(20,s.length), Math.random)); });
   on("#nextQ", next);
+  on("#zonasT", ()=>{ S.zonas=!zonasOn(); try{ localStorage.setItem("cbl.zonas",S.zonas?"1":"0"); }catch{} render(); });
   on("#startSrs", startSrs);
   on("#duelsAll", ()=>{ S.duelsAll=!S.duelsAll; render(); });
   document.querySelectorAll("[data-hmode]").forEach(b=>b.addEventListener("click",()=>{ S.hmode=b.dataset.hmode; render(); }));
