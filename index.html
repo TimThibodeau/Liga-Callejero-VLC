@@ -134,6 +134,7 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .feed .ev>span:nth-child(2){flex:1;min-width:0}
 .feed .t{font-size:12px;white-space:nowrap}
 .mapbox{display:flex;flex-direction:column;gap:6px}
+.zlab{background:rgba(255,255,255,.75);border:0;box-shadow:none;border-radius:4px;padding:1px 5px;font-family:var(--display);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#3B2A1E;text-align:center;line-height:1.1}.zlab::before{display:none}.zlab small{display:block;font-size:9px;font-weight:600;letter-spacing:.04em;opacity:.8}
 #qmap{height:260px;border-radius:10px;border:1px solid var(--line);z-index:0}
 .maplinks{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px}
 .maplinks a{color:var(--p0);font-weight:600}
@@ -1122,7 +1123,7 @@ function routeBoardHTML(ds, done){
 function routeQuestionHTML(){
   const R=S.route, q=R.list[R.i], it=ITEMS[q.id], st=STATIONS[q.o];
   let h=`<div class="qhead"><span class="eyebrow">${R.mode==="daily"?"Recorrido del día":"Práctica"} · ${R.i+1} de ${R.list.length}</span><span class="muted" style="font-size:13px">${q.role==="a"?"Parque que coopera":"Parque que actúa"}</span></div>
-  <div class="plaque"><span class="kind">Desde ${esc(st.n)}</span><span class="name">${esc(it[1])}</span>${it[2]?`<span class="info">${esc(it[2])}</span>`:""}</div>
+  <div class="plaque"><span class="kind">Desde ${esc(st.n)}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"?`<span class="info">${esc(it[2])}</span>`:""}</div>
   <div id="rmap" class="rmapbox" role="img" aria-label="Mapa con el parque y la calle de destino"></div>`;
   if(!R.checked){
     h+=`<div class="pick"><label class="eyebrow" for="rin">Tu recorrido</label><div id="rpicks" class="rpicks"></div><div class="rinwrap"><input class="input" id="rin" autocomplete="off" placeholder="Escribe una calle, en valenciano o castellano…"><div id="rsug" class="rsug"></div></div></div>
@@ -1436,7 +1437,7 @@ function quizHTML(){
   const got = q.results.reduce((s,r)=>s+r.sc,0);
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got)} pts</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
-    <div class="plaque"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[0]!=="P"&&(q.mode==="daily"||S.free.addr||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
+    <div class="plaque"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&it[0]!=="P"&&(q.mode==="daily"||S.free.addr||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
   const btns = (row) => PARKS.map((_,i)=>{
     let cls = "", pressed = row==="multi"?q.sel.multi.has(i):q.sel[row]===i;
     if(q.answered){
@@ -1511,19 +1512,27 @@ function mapHTML(it){
   const url = ll ? `https://www.google.com/maps/search/?api=1&query=${ll[0]},${ll[1]}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it[1]+", València")}`;
   const pk = Array.isArray(it[3]) ? it[3][0] : it[3];
   const label = it[9]!=null ? (it[0]==="C" ? `Trazado oficial, en el color de su parque (${PSHORT[pk]})` : `Su calle, en el color del parque (${PSHORT[pk]}) · el punto es aproximado`) : (it[7]?"Punto aproximado: un punto de la calle, no el portal":"Ubicación de la calle");
-  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${ll?ll[0]:""}" data-lng="${ll?ll[1]:""}" data-cv="${it[9]??""}" data-c="${it[0]==="C"?1:0}" data-pk="${pk}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${label}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div>${window.L&&ll?`<div class="maplinks"><button class="linkbtn" id="zonasT">${zonasOn()?"Ocultar zonas de los parques":"Ver zonas de los parques alrededor"}</button>${zonasOn()?`<span class="muted">Color de la línea: parque principal · rayas: apoyo</span>`:""}</div>`:""}</div>`;
+  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${ll?ll[0]:""}" data-lng="${ll?ll[1]:""}" data-cv="${it[9]??""}" data-c="${it[0]==="C"?1:0}" data-pk="${pk}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${label}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div>${window.L&&ll?`<div class="maplinks"><button class="linkbtn" id="zonasT">${zonasOn()?"Ocultar zonas de los parques":"Ver zonas de los parques"}</button></div>${zonasOn()?`<div class="legend" id="zleg"></div>`:""}`:""}</div>`;
 }
 function zonasOn(){ if(S.zonas==null){ try{ S.zonas=localStorage.getItem("cbl.zonas")!=="0"; }catch{ S.zonas=true; } } return S.zonas; }
-function drawZonas(m, ll, skipCv){
-  const rend=L.canvas({padding:.5}), dl=0.016, dg=0.021;
-  for(const id of BYBLOCK.C||[]){ const it=ITEMS[id]; if(it[5]==null || Math.abs(it[5]-ll[0])>dl || Math.abs(it[6]-ll[1])>dg) continue;
-    if(String(it[9])===String(skipCv)) continue;
-    const p=Array.isArray(it[3])?it[3][0]:it[3], a=Array.isArray(it[3])?null:it[4]; const lines=streetLines(it[9]);
-    const tip=`${it[1]} · ${PSHORT[p]}${a!=null&&a>=0?"–"+PSHORT[a]:""}`;
-    const cp=parkColor(p), ca=a!=null&&a>=0?parkColor(a):null;
-    if(lines) lines.forEach(l=>{ L.polyline(l,{renderer:rend,color:cp,weight:5,opacity:.75}).bindTooltip(tip).addTo(m); if(ca&&a!==p) L.polyline(l,{renderer:rend,color:ca,weight:5,opacity:.95,dashArray:"3 9",lineCap:"butt"}).bindTooltip(tip).addTo(m); });
-    else L.circleMarker([it[5],it[6]],{renderer:rend,radius:4,color:ca||cp,weight:2,fillColor:cp,fillOpacity:.9}).bindTooltip(tip).addTo(m);
-  }
+let ZONP=null;
+function loadZonas(){ if(!ZONP) ZONP=fetch("zonas.json?v="+DATA_V).then(r=>r.ok?r.json():[]).catch(()=>[]); return ZONP; }
+function hexMix(a,b,t){ const h=x=>{ x=String(x).trim().replace("#",""); if(x.length===3) x=[...x].map(c=>c+c).join(""); const n=parseInt(x,16); return isNaN(n)?null:[n>>16&255,n>>8&255,n&255]; }; const A=h(a),B=h(b); if(!A||!B) return a; return "#"+A.map((v,i)=>Math.round(v*(1-t)+B[i]*t).toString(16).padStart(2,"0")).join(""); }
+function zoneAt(Z,ll){ const x=ll[1], y=ll[0]; for(const z of Z) for(const pg of z.polys){ const rs=pg.map(r=>r.map(([la,lo])=>[lo,la])); if(polyContains(rs,x,y)) return z; } return null; }
+const zoneCol = z => hexMix(parkColor(z.p), parkColor(z.a), .3);
+function drawZonas(m, ll){
+  return loadZonas().then(Z=>{ if(!Z.length) return;
+    const leg=document.getElementById("zleg"), shapes=[]; if(!m.getPane("zonas")){ m.createPane("zonas").style.zIndex=350; m.createPane("zlab").style.zIndex=380; }
+    const here = ll ? zoneAt(Z,ll) : null;
+    for(const z of Z){ const cp=zoneCol(z), nm=`${PSHORT[z.p]} · apoyo ${PSHORT[z.a]}`;
+      const pg=L.polygon(z.polys,{pane:"zonas",color:"#3B2A1E",weight:1.4,opacity:.75,fillColor:cp,fillOpacity:z===here?.32:.22,interactive:true}).bindTooltip(`Zona ${nm}`,{sticky:true}).addTo(m);
+      shapes.push([pg,z]);
+      for(const c of (z.l||[])) L.tooltip({pane:"zlab",permanent:true,direction:"center",className:"zlab",interactive:false}).setLatLng(c).setContent(`${PSHORT[z.p]}<small>apoyo ${PSHORT[z.a]}</small>`).addTo(m);
+    }
+    const upd=()=>{ if(!leg) return; const bb=m.getBounds(); const seen=shapes.filter(([pg])=>bb.intersects(pg.getBounds()) ).map(([,z])=>z);
+      const key=new Set(); leg.innerHTML=seen.filter(z=>{ const k=z.p+"-"+z.a; if(key.has(k)) return false; key.add(k); return true; }).sort((x,y)=>(y===here)-(x===here)).map(z=>`<span${z===here?' style="font-weight:700"':""}><i style="background:${zoneCol(z)};border-radius:3px"></i>${z===here?"Aquí: ":""}${PSHORT[z.p]} <span class="muted">· apoyo ${PSHORT[z.a]}</span></span>`).join(""); };
+    m.on("moveend",upd); upd();
+  });
 }
 let MAP = null;
 function drawMap(){
@@ -1535,7 +1544,8 @@ function drawMap(){
   const dot = (p,c)=>L.circleMarker(p, {radius:8, color:"#fff", weight:3, fillColor:c, fillOpacity:1}).addTo(m);
   const zon = ll && zonasOn();
   if(!cv && !zon){ if(ll) dot(ll,parkColor(+el.dataset.pk||0)); return; }
-  loadGeo().then(()=>{ if(MAP!==m) return; if(zon) drawZonas(m, ll, cv);
+  if(zon) drawZonas(m, ll);
+  loadGeo().then(()=>{ if(MAP!==m) return;
     if(!cv){ dot(ll,parkColor(+el.dataset.pk||0)); m.setView(ll,15,{animate:false}); return; }
     const lines=streetLines(cv);
     if(!lines){ if(ll) dot(ll,"#C42A1C"); return; }
