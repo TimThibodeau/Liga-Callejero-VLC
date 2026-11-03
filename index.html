@@ -676,7 +676,7 @@ function ligaHTML(){
     else if(me && me===lead && rows[1] && me.pts>0) h += `<p style="margin:12px 0 0;font-size:14px">Vas primero, con ${fmt(me.pts-rows[1].pts)} puntos de ventaja sobre ${esc(rows[1].p.alias)}.</p>`;
   }
   h += `</div>`;
-  return h + recordsHTML() + (window.LIGA_WEB && S.db ? `<div class="spread"><span class="muted" style="font-size:13px">Guarda de vez en cuando una copia de todo el historial de la liga.</span><button class="btn ghost small" id="backup">Descargar copia de seguridad</button></div>` : "");
+  return h + recordsHTML() + (window.LIGA_WEB && S.db ? `<div class="spread"><span class="muted" style="font-size:13px">Guarda de vez en cuando una copia de todo el historial de la liga.</span><span class="row" style="gap:6px"><button class="btn ghost small" id="backup">Descargar copia de seguridad</button><button class="btn ghost small" id="restore">${esc(S.restoreMsg||"Recuperar desde copia")}</button><input type="file" id="restoreFile" accept=".json,application/json" hidden></span></div>` : "");
 }
 function recordsHTML(){
   const ps = playerList(); if(!ps.length) return "";
@@ -935,6 +935,31 @@ function subscribeDuels(){
     S.duelsById=byId; S.duels=list; if(!S.duelsLoaded){ S.duelsLoaded=true; hSeed(); }
     if(!S.quiz && !(S.route && S.view==="rutas")) render();
   }, ()=>{});
+}
+// Recupera de una copia lo que se pueda haber perdido (últimas respuestas, calles vistas, tarjetas de repaso)
+// de todos los jugadores. Nunca borra nada: solo añade lo que falta y junta el historial.
+function mergeSrs(cur, bak){
+  const out={lo:{...(cur.lo||{})}, h:{...(cur.h||{})}, c:{...(cur.c||{})}}; let n=0;
+  for(const k in (bak.h||{})){ const b=String(bak.h[k]), c=out.h[k];
+    let m = !c ? b : c===b ? b : (c.length>=b.length && c.startsWith(b)) ? c : (b+c).slice(-3);
+    if(m!==c){ out.h[k]=m; n++; } }
+  for(const k in (bak.lo||{})) if(out.lo[k]==null){ out.lo[k]=bak.lo[k]; n++; }
+  for(const k in (bak.c||{})) if(out.c[k]==null){ out.c[k]=bak.c[k]; n++; }
+  return {out,n};
+}
+async function doRestore(file){
+  const say=t=>{ S.restoreMsg=t; const b=$("#restore"); if(b) b.textContent=t; };
+  try{
+    say("Leyendo…"); const data=JSON.parse(await file.text()); if(!data||!data.players) throw new Error("no es una copia");
+    let tot=0, who=[];
+    for(const pid in data.players){ const bak=data.players[pid]?.srs; if(!bak) continue;
+      if(pid===S.pid && SRS.loaded){ const {out,n}=mergeSrs({lo:SRS.lo,h:SRS.h,c:SRS.c},bak); SRS.lo=out.lo; SRS.h=out.h; SRS.c=out.c; SRS.cfg.h1=1; if(n) srsSave(); tot+=n; if(n) who.push(data.players[pid].alias||aliasOf(pid)); continue; }
+      const ref=S.db.doc(`players/${pid}/srs/main`); const snap=await ref.get(); const cur=snap.exists?(snap.data()||{}):{};
+      const {out,n}=mergeSrs(cur,bak); if(n){ await ref.set({lo:out.lo,h:out.h,c:out.c,cfg:{...(bak.cfg||{}),...(cur.cfg||{}),h1:1}},{merge:true}); tot+=n; who.push(data.players[pid].alias||aliasOf(pid)); }
+    }
+    BAR.loAt=0; loadAllLo(true);
+    say(tot?`Recuperado: ${who.join(", ")}`:"No faltaba nada"); render();
+  }catch(e){ try{console.error(e);}catch{} say("No se pudo leer la copia"); }
 }
 async function doBackup(){
   const btn=$("#backup"); if(btn){ btn.disabled=true; btn.textContent="Preparando…"; }
@@ -1593,6 +1618,8 @@ function bindView(){
   document.querySelectorAll("[data-flag]").forEach(b=>b.addEventListener("click",()=>toggleFlag(+b.dataset.flag)));
   document.querySelectorAll("[data-unflag]").forEach(b=>b.addEventListener("click",()=>recoverFlag(+b.dataset.unflag)));
   on("#backup", doBackup);
+  on("#restore", ()=>{ const f=$("#restoreFile"); if(f) f.click(); });
+  { const f=$("#restoreFile"); if(f) f.addEventListener("change",()=>{ if(f.files&&f.files[0]) doRestore(f.files[0]); }); }
   on("#duelNew", ()=>{ S.duelForm = S.duelForm ? null : {rival:null,n:10,mix:"reto"}; render(); });
   document.querySelectorAll("[data-drival]").forEach(b=>b.addEventListener("click",()=>{ S.duelForm.rival=b.dataset.drival; render(); }));
   document.querySelectorAll("[data-dn]").forEach(b=>b.addEventListener("click",()=>{ S.duelForm.n=+b.dataset.dn; render(); }));
