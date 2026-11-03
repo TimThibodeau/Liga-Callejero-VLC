@@ -289,6 +289,12 @@ const firebaseConfig = {
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
 const DATA_V = "12";
+const APP_V = "16";
+// Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
+// para que una pestaña vieja no guarde datos con código antiguo.
+function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") checkVersion(); });
+setInterval(checkVersion, 10*60*1000);
 let DATA_BASE = 1e9;
 const NEW_ITEMS_FROM = "2026-10-30";
 const TYPE_ES = {"C/":"Calle","AV":"Avenida","PL":"Plaza","PL.":"Plaza","CAMI":"Camino","CTRA":"Carretera","ENTD":"Entrada","CV":"Camino Viejo","SENDA":"Senda","PG":"Paseo","PTGE":"Pasaje","GV":"Gran Vía","PTDA":"Partida","PARTIDA":"Partida","CRA":"Carrera","GRUP":"Grupo","BARRI":"Barrio","PONT":"Puente","GLORIETA":"Glorieta"};
@@ -459,6 +465,7 @@ function recordOutcome(d, id, sc){
   d.o = d.o || {};
   if(sc<1) d.o[id] = 0;
   else if(pendingFails().has(id) || d.o[id]===0) d.o[id] = 1;
+  if(!Array.isArray(ITEMS[id]?.[3])){ d.hx = d.hx || {}; d.hx[id] = ((d.hx[id]||"")+hCh(sc)).slice(-3); }
 }
 
 // ---------- derived ----------
@@ -697,7 +704,7 @@ function srsRef(){ return S.db && S.pid ? S.db.doc(`players/${S.pid}/srs/main`) 
 function ensureSrs(){ if(S.db && S.pid && SRS.pidSub!==S.pid){ SRS.pidSub=S.pid; srsSubscribe(); } }
 function srsSubscribe(){
   if(SRS.sub){ try{SRS.sub();}catch{} SRS.sub=null; }
-  SRS.loaded=false; SRS.c={}; SRS.lo={}; SRS.h={}; SRS.cfg={n:10,b:["C"]}; SRS.nd=""; SRS.nn=0;
+  SRS.loaded=false; SRS.c={}; SRS.lo={}; SRS.h={}; S.hSeeded=false; SRS.cfg={n:10,b:["C"]}; SRS.nd=""; SRS.nn=0;
   const ref=srsRef(); if(!ref) return;
   SRS.sub = ref.onSnapshot(snap=>{
     if(SRS.busy || SRS.dirty) return;
@@ -725,22 +732,24 @@ function loSeed(){
 }
 const hCh = sc => sc>=1?"1":sc>=0.5?"m":"0";
 function hPush(id,sc){ SRS.h[id]=((SRS.h[id]||"")+hCh(sc)).slice(-3); }
-// Últimas 3 respuestas por calle, reconstruidas una vez con todo lo guardado: retos, fallos, duelos y repaso.
+// Últimas 3 respuestas por calle. Se reconstruyen en cada carga con todo lo guardado (retos, entreno, fallos,
+// duelos y repaso) y se juntan con lo guardado: si otra pestaña con una versión vieja lo borró, se recupera solo.
 function hSeed(){
-  if(!SRS.loaded || !S.myDaysLoaded || !S.duelsLoaded || SRS.cfg.h1) return;
+  if(!SRS.loaded || !S.myDaysLoaded || !S.duelsLoaded || S.hSeeded) return; S.hSeeded=true;
   const ev=[]; const days=myDays();
   for(const ds of Object.keys(days)){ const d=days[ds], t0=Date.parse(ds+"T00:00:00Z");
+    if(d.hx){ for(const k in d.hx) [...String(d.hx[k])].forEach((c,j)=>ev.push([t0+40000000+j,+k,c==="1"?1:c==="m"?0.5:0])); continue; }
     (d.dy?.ans||[]).forEach((a,k)=>{ const id=Array.isArray(a)?a[0]:a.i, sc=Array.isArray(a)?a[1]:a.s; if(id!=null) ev.push([t0+k,id,sc]); });
     const o=d.o||{}; for(const k in o) ev.push([t0+80000000,+k,o[k]===1?1:0]); }
   for(const D of (S.duels||[])) for(const sd of ["ra","rb"]){ if((sd==="ra"?D.a:D.b)!==S.pid) continue; const r=D[sd]; const t0=r?.end||D.c||0; (r?.ans||[]).forEach((a,k)=>ev.push([t0+k,a.i,a.s])); }
   ev.sort((a,b)=>a[0]-b[0]);
-  const h={}; for(const [,id,sc] of ev){ h[id]=((h[id]||"")+hCh(sc)).slice(-3); }
+  const h={}; for(const [,id,sc] of ev){ if(id==null||isNaN(id)) continue; h[id]=((h[id]||"")+hCh(sc)).slice(-3); }
   for(const k in SRS.c){ const c=srsGet(k); if(c && c.r>0 && !h[k]) h[k]="1"; }
   for(const k in SRS.lo) if(!h[k]) h[k]=hCh(SRS.lo[k]);
-  for(const k in SRS.h) h[k]=(((h[k]||"")+SRS.h[k])).slice(-3);
-  SRS.h=h;
-  for(const k in h) if(SRS.lo[k]==null){ const ch=h[k].slice(-1); SRS.lo[k]= ch==="1"?1:ch==="m"?0.5:0; }
-  SRS.cfg.h1=1; srsSave();
+  let ch=!SRS.cfg.h1;
+  for(const k in h){ const cur=SRS.h[k]; if(!cur || cur.length<h[k].length){ SRS.h[k]=h[k]; ch=true; } }
+  for(const k in SRS.h) if(SRS.lo[k]==null){ const c=SRS.h[k].slice(-1); SRS.lo[k]= c==="1"?1:c==="m"?0.5:0; ch=true; }
+  if(ch){ SRS.cfg.h1=1; srsSave(); }
 }
 function srsSaveLazy(){ SRS.dirty=true; if(SRS.timer) return; SRS.timer=setTimeout(()=>{ SRS.timer=null; srsFlush(); }, 4000); }
 function srsSave(){ SRS.dirty=true; clearTimeout(SRS.timer); SRS.timer=setTimeout(()=>{ SRS.timer=null; srsFlush(); }, 800); }
