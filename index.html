@@ -642,7 +642,7 @@ function ligaHTML(){
     const d = S.days[p.id]||{}; let pts=0, dpts=0, retos=0, n=0, ok=0, wins=0;
     for(const ds in d){ if(ds<from||ds>to) continue; const doc=d[ds];
       pts += dayPts(doc);
-      if(doc.dy?.done){ retos++; dpts += doc.dy.pts; n += 10; ok += doc.dy.pts; }
+      if(doc.dy?.done){ retos++; dpts += doc.dy.pts; n += doc.dy.n || (doc.dy.ans||[]).length || 10; ok += doc.dy.pts; }
       if(doc.fr){ n += doc.fr.n||0; ok += doc.fr.pts||0; }
     }
     return {p,pts,dpts,retos,n,acc:n?ok/n:0,streak:streak(p.id)};
