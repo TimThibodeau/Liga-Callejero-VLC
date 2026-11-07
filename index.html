@@ -288,8 +288,8 @@ const firebaseConfig = {
 "use strict";
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
-const DATA_V = "12";
-const APP_V = "16";
+const DATA_V = "14";
+const APP_V = "18";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
@@ -339,8 +339,11 @@ function langEs(){ return S.lang==="es"; }
 function bigName(it){ const es=esName(it); return langEs()&&es ? es : it[1]; }
 function smallName(it){ const es=esName(it); if(!es) return ""; return langEs() ? it[1] : es; }
 function esSub(it){ const es=esName(it); return es?` <span class="muted">· ${esc(es)}</span>`:""; }
-const BLOCKS = {C:"Calles",E:"Equipamientos",M:"Museos y monumentos",H:"Hospitales",G:"EGAs",P:"Puentes del Turia",J:"Parques y jardines"};
-const BLOCK_ONE = {C:"Calle",E:"Equipamiento municipal",M:"Museo / monumento",H:"Hospital / centro",G:"EGA",P:"Puente del Turia",J:"Parque / jardín"};
+const BLOCKS = {C:"Calles",E:"Equipamientos",M:"Museos y monumentos",H:"Hospitales",G:"EGAs",P:"Puentes del Turia",K:"Ubicaciones CLOCK",S:"Ubicaciones Saler"};
+const BLOCK_LABEL = {...BLOCKS, J:"Parques y jardines"};
+const SZONES = ["Zona 1","Zona 2","Zona 3","Zona 4"];
+const BLOCK_ONE = {C:"Calle",E:"Equipamiento municipal",M:"Museo / monumento",H:"Hospital / centro",G:"EGA",P:"Puente del Turia",J:"Parque / jardín",K:"Ubicación CLOCK",S:"Ubicación Saler"};
+const kindOf = it => (it[0]==="K"||it[0]==="S") ? (it[0]==="S"?"El Saler · zona de la Devesa":it[2]) : BLOCK_ONE[it[0]];
 const DAILY_MIX_V1 = [["C",5],["E",2],["M",1],["H",1],["G",1]];
 const MIX_V2_FROM = "2026-10-15";
 const MIX_V3_FROM = "2026-10-30";
@@ -598,6 +601,7 @@ function duelHTML(ds, ids){
 const markHTML = sc => sc==null?`<span class="mark mn">·</span>`:sc===1?`<span class="mark m1">✓</span>`:sc===0.5?`<span class="mark m05">½</span>`:`<span class="mark m0">✗</span>`;
 function ansHTML(it){
   const p = it[3], a = it[4];
+  if(it[0]==="S") return `<span class="ans" style="--pc:#5B6B7A"><i></i>${SZONES[p]}</span>`;
   const one = i => `<span class="ans" style="--pc:var(--p${i})"><i></i>${PSHORT[i]}</span>`;
   if(Array.isArray(p)) return p.map(one).join(" ");
   return one(p) + (a>=0?` <span class="muted">/</span> ${one(a)}`:"");
@@ -623,10 +627,11 @@ function libreHTML(){
 }
 function freePool(){
   const f = S.free; const out = [];
-  for(const b of f.blocks) for(const id of (BYBLOCK[b]||[])){
+  for(const b of f.blocks){ if(!BLOCKS[b]) continue; for(const id of (BYBLOCK[b]||[])){
+    if(b==="S"){ out.push(id); continue; }
     const p = ITEMS[id][3];
     if(Array.isArray(p) ? p.some(x=>f.parks.has(x)) : f.parks.has(p)) out.push(id);
-  }
+  } }
   return activePool(out);
 }
 
@@ -794,6 +799,7 @@ function startSrs(){
   startQuiz("srs", due.concat(nw)); S.quiz.newSet=new Set(nw);
 }
 function recordStats(d, it, sel, sc){
+  if(it[0]==="S"){ d.bk = d.bk || {}; const b=(d.bk.S||[0,0]).slice(); b[0]++; b[1]+=sc; d.bk.S=b; return; }
   if(Array.isArray(it[3]) || sel.p==null) return;
   const vp=bestPair(it, sel);
   d.cm = d.cm || Array(25).fill(0); d.cm[vp[0]*5+sel.p]++;
@@ -819,9 +825,9 @@ function fallosHTML(){
     h += `<div class="card"><div class="eyebrow" style="margin-bottom:10px">Próximos 7 días</div><div class="fc">${fc.map((n,i)=>{const ds=addDays(today(),i+1); const lab=new Date(ds+"T12:00:00Z").toLocaleDateString("es-ES",{weekday:"short",timeZone:"UTC"}).replace(".",""); return `<div class="fcol"><span class="num">${n}</span><i style="height:${Math.round(56*n/mx)+2}px"></i><span class="muted">${lab}</span></div>`;}).join("")}</div></div>`;
     h += `<div class="card" style="display:flex;flex-direction:column;gap:12px"><div><div class="eyebrow" style="margin-bottom:8px">Nuevas por día</div><div class="seg" role="group">${[0,10,20,30].map(n=>`<button data-srsn="${n}" aria-pressed="${(SRS.cfg.n||0)===n}">${n}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Tarjetas que aún no has visto y que entran en el repaso cada día, como las nuevas de Anki. Con 0 solo repasas tus fallos.</p></div>
       <div><div class="eyebrow" style="margin-bottom:8px">Máximo de repasos al día</div><div class="seg" role="group">${[[50,"50"],[100,"100"],[150,"150"],[0,"Sin límite"]].map(([n,l])=>`<button data-srscap="${n}" aria-pressed="${srsCap()===n}">${l}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Si se te acumulan más, se reparten solos en los días siguientes, empezando por tus bestias negras. Así nunca ves una montaña de pendientes.</p></div>
-      <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
+      <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G","K","S"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
     const beasts = cards.map(k=>({id:+k,c:srsGet(k)})).filter(x=>x.c.l>=2).sort((a,b)=>b.c.l-a.c.l).slice(0,15);
-    if(beasts.length) h += `<div class="card"><div class="spread"><span class="eyebrow">Tus bestias negras</span><span class="row" style="gap:6px"><button class="btn ghost small" id="bprev" aria-label="Anterior">‹</button><span class="muted num" id="bpos" style="font-size:15px">1 de ${beasts.length}</span><button class="btn ghost small" id="bnext" aria-label="Siguiente">›</button></span></div><div class="bcar" id="bcar">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="bcard" data-bi="${x.id}"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><b class="bn">${esc(it[1])}</b>${it[2]&&it[2]!=="null"&&it[0]!=="P"?`<span class="muted bi">${esc(it[2])}</span>`:""}<div class="bp">${ansHTML(it)}</div><span class="pill lost">${x.c.l} fallos</span></div>`;}).join("")}</div>${window.L?`<div id="beastmap" class="beastmap" role="img" aria-label="Mapa de la bestia negra"></div>`:""}</div>`;
+    if(beasts.length) h += `<div class="card"><div class="spread"><span class="eyebrow">Tus bestias negras</span><span class="row" style="gap:6px"><button class="btn ghost small" id="bprev" aria-label="Anterior">‹</button><span class="muted num" id="bpos" style="font-size:15px">1 de ${beasts.length}</span><button class="btn ghost small" id="bnext" aria-label="Siguiente">›</button></span></div><div class="bcar" id="bcar">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="bcard" data-bi="${x.id}"><span class="kind">${esc(kindOf(it))}</span><b class="bn">${esc(it[1])}</b>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])?`<span class="muted bi">${esc(it[2])}</span>`:""}<div class="bp">${ansHTML(it)}</div><span class="pill lost">${x.c.l} fallos</span></div>`;}).join("")}</div>${window.L?`<div id="beastmap" class="beastmap" role="img" aria-label="Mapa de la bestia negra"></div>`:""}</div>`;
   }
   h += statsHTML();
   return h;
@@ -845,7 +851,7 @@ function statsHTML(){
   const apo = rows.filter(r=>r.na>=5);
   if(apo.length) h += `<div class="eyebrow" style="margin:16px 0 6px">Parque de apoyo (cuando aciertas el principal)</div><div class="fails">${apo.map(r=>`<div class="f"><span>Cuando el apoyo es <b>${PSHORT[r.i]}</b></span><span class="muted">${Math.round(100*r.oka/r.na)} % de ${r.na}</span></div>`).join("")}</div>`;
   const bks = Object.entries(bk).filter(([,x])=>x[0]>=5);
-  if(bks.length) h += `<div class="eyebrow" style="margin:16px 0 6px">Por tipo de sitio</div><div class="fails">${bks.map(([b,x])=>`<div class="f"><span>${BLOCKS[b]}</span><span class="muted">${Math.round(100*x[1]/x[0])} % de puntos · ${x[0]} preg.</span></div>`).join("")}</div>`;
+  if(bks.length) h += `<div class="eyebrow" style="margin:16px 0 6px">Por tipo de sitio</div><div class="fails">${bks.map(([b,x])=>`<div class="f"><span>${BLOCK_LABEL[b]||b}</span><span class="muted">${Math.round(100*x[1]/x[0])} % de puntos · ${x[0]} preg.</span></div>`).join("")}</div>`;
   if(worst) h += `<div class="spread" style="margin-top:16px"><span style="font-size:14px">Tu punto más flojo es <b>${PSHORT[worst.i]}</b> (${Math.round(worst.acc*100)} %).</span><button class="btn small" id="trainWeak" data-weak="${worst.i}">Entrenar ${PSHORT[worst.i]} · 20</button></div>`;
   return h + `</div>`;
 }
@@ -1476,20 +1482,21 @@ function quizHTML(){
   const got = q.results.reduce((s,r)=>s+r.sc,0);
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got)} pts</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
-    <div class="plaque"><span class="kind">${esc(BLOCK_ONE[it[0]])}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&it[0]!=="P"&&(q.mode==="daily"||S.free.addr||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
-  const btns = (row) => PARKS.map((_,i)=>{
+    <div class="plaque"><span class="kind">${esc(kindOf(it))}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])&&(q.mode==="daily"||S.free.addr||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
+  const isS = it[0]==="S";
+  const btns = (row) => (isS?SZONES:PARKS).map((_,i)=>{
     let cls = "", pressed = row==="multi"?q.sel.multi.has(i):q.sel[row]===i;
     if(q.answered){
       const vp=q.vp||[it[3],it[4]]; const right = row==="multi"?it[3].includes(i):row==="p"?vp[0]===i:vp[1]===i;
       if(right) cls="ok"; else if(pressed) cls="ko";
     }
-    return `<button class="park ${cls}" data-row="${row}" data-i="${i}" aria-pressed="${pressed}" style="--pc:var(--p${i})" ${q.answered?"disabled":""}><i></i>${PSHORT[i]}<span class="k">${i+1}</span></button>`;
+    return `<button class="park ${cls}" data-row="${row}" data-i="${i}" aria-pressed="${pressed}" style="--pc:${isS?"#5B6B7A":`var(--p${i})`}" ${q.answered?"disabled":""}><i></i>${isS?SZONES[i]:PSHORT[i]}<span class="k">${i+1}</span></button>`;
   }).join("");
   if(multi){
     h += `<div class="pick"><div class="lab"><span class="eyebrow">Parques que entran · marca todos</span></div><div class="parks">${btns("multi")}</div></div>`;
     if(!q.answered) h += `<button class="btn" id="checkMulti" ${q.sel.multi.size?"":"disabled"}>Comprobar</button>`;
   } else {
-    h += `<div class="pick"><div class="lab"><span class="eyebrow">Parque principal</span></div><div class="parks">${btns("p")}</div></div>`;
+    h += `<div class="pick"><div class="lab"><span class="eyebrow">${isS?"Zona de la Devesa":"Parque principal"}</span></div><div class="parks">${btns("p")}</div></div>`;
     if(hasA) h += `<div class="pick"><div class="lab"><span class="eyebrow">Parque de apoyo</span></div><div class="parks">${btns("a")}</div></div>`;
   }
   if(q.answered){
@@ -1550,8 +1557,8 @@ function mapHTML(it){
   if(!ll && it[9]==null) return "";
   const url = ll ? `https://www.google.com/maps/search/?api=1&query=${ll[0]},${ll[1]}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it[1]+", València")}`;
   const pk = Array.isArray(it[3]) ? it[3][0] : it[3];
-  const label = it[9]!=null ? (it[0]==="C" ? `Trazado oficial, en el color de su parque (${PSHORT[pk]})` : `Su calle, en el color del parque (${PSHORT[pk]}) · el punto es aproximado`) : (it[7]?"Punto aproximado: un punto de la calle, no el portal":"Ubicación de la calle");
-  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${ll?ll[0]:""}" data-lng="${ll?ll[1]:""}" data-cv="${it[9]??""}" data-c="${it[0]==="C"?1:0}" data-pk="${pk}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${label}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div>${window.L&&ll?`<div class="maplinks"><button class="linkbtn" id="zonasT">${zonasOn()?"Ocultar zonas de los parques":"Ver zonas de los parques"}</button></div>${zonasOn()?`<div class="legend" id="zleg"></div>`:""}`:""}</div>`;
+  const label = it[9]!=null ? (it[0]==="C" ? `Trazado oficial, en el color de su parque (${PSHORT[pk]})` : `Su calle, en el color del parque (${PSHORT[pk]}) · el punto es aproximado`) : (it[0]==="K"?(it[7]?"Ubicación aproximada":"Ubicación oficial del Ayuntamiento"):it[7]?"Punto aproximado: un punto de la calle, no el portal":"Ubicación de la calle");
+  return `<div class="mapbox">${window.L?`<div id="qmap" data-lat="${ll?ll[0]:""}" data-lng="${ll?ll[1]:""}" data-cv="${it[9]??""}" data-c="${it[0]==="C"?1:0}" data-pk="${pk}" role="img" aria-label="Mapa de la ubicación"></div>`:""}<div class="maplinks"><span class="muted">${label}</span><a href="${url}" target="_blank" rel="noopener">Abrir en Google Maps</a></div>${window.L&&ll?`<div class="maplinks"><button class="linkbtn" id="zonasT">${zonasOn()?"Ocultar zonas de los parques":"Ver zonas de los parques"}</button></div>`:""}</div>`;
 }
 function zonasOn(){ if(S.zonas==null){ try{ S.zonas=localStorage.getItem("cbl.zonas")!=="0"; }catch{ S.zonas=true; } } return S.zonas; }
 let ZONP=null;
