@@ -288,8 +288,8 @@ const firebaseConfig = {
 "use strict";
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
-const DATA_V = "14";
-const APP_V = "18";
+const DATA_V = "16";
+const APP_V = "20";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
@@ -790,7 +790,7 @@ function srsSpread(){
 }
 function srsDueCount(){ const t=dnum(today()); let n=0; for(const k in SRS.c){ const d=parseInt(SRS.c[k],10); if(d<=t) n++; } return n; }
 function srsNewLeft(){ const n=SRS.cfg.n||0; const used = SRS.nd===today()?SRS.nn:0; return Math.max(0,n-used); }
-function srsNewPick(k){ if(k<=0) return []; const pool=[]; for(const b of (SRS.cfg.b||["C"])) for(const id of BYBLOCK[b]||[]) if(!SRS.c[id]) pool.push(id); return sample(activePool(pool),k,Math.random); }
+function srsNewPick(k){ if(k<=0) return []; const pool=[]; for(const b of (SRS.cfg.b||["C"])) if(b!=="S") for(const id of BYBLOCK[b]||[]) if(!SRS.c[id]) pool.push(id); return sample(activePool(pool),k,Math.random); }
 function srsForecast(days){ const t=dnum(today()); let n=0; for(const k in SRS.c){ const d=parseInt(SRS.c[k],10); if(d===t+days) n++; } return n; }
 function startSrs(){
   if(!S.pid && S.db && S.canWrite) return askWho();
@@ -825,7 +825,7 @@ function fallosHTML(){
     h += `<div class="card"><div class="eyebrow" style="margin-bottom:10px">Próximos 7 días</div><div class="fc">${fc.map((n,i)=>{const ds=addDays(today(),i+1); const lab=new Date(ds+"T12:00:00Z").toLocaleDateString("es-ES",{weekday:"short",timeZone:"UTC"}).replace(".",""); return `<div class="fcol"><span class="num">${n}</span><i style="height:${Math.round(56*n/mx)+2}px"></i><span class="muted">${lab}</span></div>`;}).join("")}</div></div>`;
     h += `<div class="card" style="display:flex;flex-direction:column;gap:12px"><div><div class="eyebrow" style="margin-bottom:8px">Nuevas por día</div><div class="seg" role="group">${[0,10,20,30].map(n=>`<button data-srsn="${n}" aria-pressed="${(SRS.cfg.n||0)===n}">${n}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Tarjetas que aún no has visto y que entran en el repaso cada día, como las nuevas de Anki. Con 0 solo repasas tus fallos.</p></div>
       <div><div class="eyebrow" style="margin-bottom:8px">Máximo de repasos al día</div><div class="seg" role="group">${[[50,"50"],[100,"100"],[150,"150"],[0,"Sin límite"]].map(([n,l])=>`<button data-srscap="${n}" aria-pressed="${srsCap()===n}">${l}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Si se te acumulan más, se reparten solos en los días siguientes, empezando por tus bestias negras. Así nunca ves una montaña de pendientes.</p></div>
-      <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G","K","S"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
+      <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G","K"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
     const beasts = cards.map(k=>({id:+k,c:srsGet(k)})).filter(x=>x.c.l>=2).sort((a,b)=>b.c.l-a.c.l).slice(0,15);
     if(beasts.length) h += `<div class="card"><div class="spread"><span class="eyebrow">Tus bestias negras</span><span class="row" style="gap:6px"><button class="btn ghost small" id="bprev" aria-label="Anterior">‹</button><span class="muted num" id="bpos" style="font-size:15px">1 de ${beasts.length}</span><button class="btn ghost small" id="bnext" aria-label="Siguiente">›</button></span></div><div class="bcar" id="bcar">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="bcard" data-bi="${x.id}"><span class="kind">${esc(kindOf(it))}</span><b class="bn">${esc(it[1])}</b>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])?`<span class="muted bi">${esc(it[2])}</span>`:""}<div class="bp">${ansHTML(it)}</div><span class="pill lost">${x.c.l} fallos</span></div>`;}).join("")}</div>${window.L?`<div id="beastmap" class="beastmap" role="img" aria-label="Mapa de la bestia negra"></div>`:""}</div>`;
   }
@@ -1530,6 +1530,8 @@ function answer(){
   const q = S.quiz; const id = q.ids[q.i]; const it = ITEMS[id];
   const sc = scoreOf(it, q.sel); const ms = Math.min(120000, Math.round(performance.now()-q.t0));
   q.answered = true; q.results.push({id,sc}); q.vp = Array.isArray(it[3]) ? null : bestPair(it, q.sel);
+  // Ubicaciones Saler: solo para estudiar. No suman puntos, ni estadísticas, ni fallos, ni insignias, ni repaso.
+  if(it[0]==="S"){ render(); return; }
   if(q.mode==="duel") duelAnswer(q, id, sc, ms);
   if(S.db && S.pid){
     mutateDay(today(), d=>{
