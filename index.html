@@ -288,8 +288,8 @@ const firebaseConfig = {
 "use strict";
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
-const DATA_V = "18";
-const APP_V = "23";
+const DATA_V = "20";
+const APP_V = "25";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
@@ -339,7 +339,7 @@ function langEs(){ return S.lang==="es"; }
 function bigName(it){ const es=esName(it); return langEs()&&es ? es : it[1]; }
 function smallName(it){ const es=esName(it); if(!es) return ""; return langEs() ? it[1] : es; }
 function esSub(it){ const es=esName(it); return es?` <span class="muted">· ${esc(es)}</span>`:""; }
-const BLOCKS = {C:"Calles",E:"Equipamientos",M:"Museos y monumentos",H:"Hospitales",G:"EGAs",P:"Puentes del Turia",K:"Ubicaciones CLOCK",S:"Ubicaciones Saler"};
+const BLOCKS = {C:"Calles",E:"Equipamientos",M:"Museos y monumentos",H:"Hospitales",G:"EGAs",P:"Puentes del Turia",K:"Ubicaciones CLOCK",R:"Equipamientos clave",S:"Ubicaciones Saler"};
 const BLOCK_LABEL = {...BLOCKS, J:"Parques y jardines"};
 const SZONES = ["Zona 1","Zona 2","Zona 3","Zona 4"];
 const BLOCK_ONE = {C:"Calle",E:"Equipamiento municipal",M:"Museo / monumento",H:"Hospital / centro",G:"EGA",P:"Puente del Turia",J:"Parque / jardín",K:"Ubicación CLOCK",S:"Ubicación Saler"};
@@ -633,7 +633,7 @@ function freePool(){
     const p = ITEMS[id][3];
     if(Array.isArray(p) ? p.some(x=>f.parks.has(x)) : f.parks.has(p)) out.push(id);
   } }
-  return activePool(out);
+  return activePool([...new Set(out)]);
 }
 
 // ----- RANKING -----
@@ -1384,30 +1384,40 @@ function heatHTML(){
 function vitPicker(){ const vp=vitPid(); return `<div class="seg segwrap" role="group" style="margin-bottom:10px">${playerList().map(p=>`<button data-vitp="${esc(p.id)}" aria-pressed="${p.id===vp}">${p.id===S.pid?"Yo":esc(p.alias||aliasOf(p.id))}</button>`).join("")}</div>`; }
 // ----- MAPA DE UBICACIONES CLOCK (estudio) -----
 let CMAP=null, CMARK={};
-function clockTypes(){ const t={}; for(const id of (BYBLOCK.K||[])){ const k=ITEMS[id][2]; t[k]=(t[k]||0)+1; } return Object.entries(t).sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
-function clockSel(){ if(!S.cTypes) S.cTypes=new Set(clockTypes()); return S.cTypes; }
-function clockIds(){ const sel=clockSel(); const fl=flaggedSet(Date.now()+1); return (BYBLOCK.K||[]).filter(id=>sel.has(ITEMS[id][2]) && !fl.has(id)); }
+const CBLOCKS = {K:"Ubicaciones CLOCK", R:"Equipamientos clave", M:"Museos y monumentos", E:"Equipamientos"};
+function cBlock(){ return CBLOCKS[S.cBlock] ? S.cBlock : "K"; }
+function typeOf(it){
+  if(it[0]==="K") return it[2];
+  const info=String(it[2]||"");
+  if(it[0]==="M") return /Museo/i.test(info) ? "Museo" : "Monumento";
+  const t=info.includes("·") ? info.split("·").pop().trim() : "";
+  return (!t || /^(C\/|AV |PL |PG |GV |CAMI |CV |LLOC |PL\.)/.test(t) || /\d/.test(t)) ? "Otros" : t;
+}
+function clockTypes(){ const t={}; for(const id of (BYBLOCK[cBlock()]||[])){ const k=typeOf(ITEMS[id]); t[k]=(t[k]||0)+1; } return Object.entries(t).sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
+function clockSel(){ if(!S.cTypes || S.cTypesB!==cBlock()){ S.cTypes=new Set(clockTypes()); S.cTypesB=cBlock(); } return S.cTypes; }
+function clockIds(){ const sel=clockSel(); const fl=flaggedSet(Date.now()+1); return (BYBLOCK[cBlock()]||[]).filter(id=>{ const it=ITEMS[id]; return !Array.isArray(it[3]) && sel.has(typeOf(it)) && !fl.has(id); }); }
 function clockMapHTML(){
   if(!(BYBLOCK.K||[]).length) return "";
   const open=!!S.cOpen;
-  let h=`<div class="card"><div class="spread"><div style="min-width:0;flex:1 1 240px"><h3 style="font-size:24px">Mapa de Ubicaciones CLOCK</h3><p class="muted" style="margin:4px 0 0">Todas las ubicaciones en su sitio. Toca un punto para ver qué es y qué parques entran.</p></div><button class="btn${open?" ghost":""}" id="cOpen">${open?"Cerrar mapa":"Abrir mapa"}</button></div>`;
+  let h=`<div class="card"><div class="spread"><div style="min-width:0;flex:1 1 240px"><h3 style="font-size:24px">Mapa de ubicaciones</h3><p class="muted" style="margin:4px 0 0">CLOCK, museos y monumentos o equipamientos, cada uno en su sitio. Toca un punto para ver qué es y qué parques entran.</p></div><button class="btn${open?" ghost":""}" id="cOpen">${open?"Cerrar mapa":"Abrir mapa"}</button></div>`;
   if(!open) return h+`</div>`;
+  h+=`<div class="seg segwrap" role="group" style="margin-top:12px">${Object.entries(CBLOCKS).map(([k,v])=>`<button data-cblock="${k}" aria-pressed="${cBlock()===k}">${v}</button>`).join("")}</div>`;
   const types=clockTypes(), sel=clockSel(), ids=clockIds();
   h+=`<div style="margin-top:12px"><div class="eyebrow" style="margin-bottom:8px">Qué se ve</div><div class="chips"><button class="chip" id="cAll" aria-pressed="${sel.size===types.length}">Todo</button>${types.map(t=>`<button class="chip" data-ctype="${esc(t)}" aria-pressed="${sel.has(t)}">${esc(t)}</button>`).join("")}</div>
     <div class="chips" style="margin-top:8px"><button class="chip" id="cHide" aria-pressed="${!!S.cHide}">Modo examen: puntos sin color</button><button class="chip" id="cZones" aria-pressed="${S.cZones!==false}">Zonas de los parques</button></div></div>
     ${window.L?`<div id="cmap" class="bmap" style="height:440px;margin-top:12px" role="img" aria-label="Mapa de ubicaciones"></div>`:""}
     <p class="muted" style="font-size:13px;margin:8px 0 0">${ids.filter(id=>ITEMS[id][5]!=null).length} en el mapa${ids.some(id=>ITEMS[id][5]==null)?` · ${ids.filter(id=>ITEMS[id][5]==null).length} sin punto exacto (solo en la tabla)`:""}</p>`;
   // tabla: primero zona (parque principal), luego tipo
-  const byP={}; for(const id of ids){ const it=ITEMS[id]; (byP[it[3]]||(byP[it[3]]={}))[it[2]]=((byP[it[3]]||{})[it[2]]||[]).concat(id); }
+  const byP={}; for(const id of ids){ const it=ITEMS[id], ty=typeOf(it); (byP[it[3]]||(byP[it[3]]={}))[ty]=((byP[it[3]]||{})[ty]||[]).concat(id); }
   h+=`<div style="margin-top:14px">`;
   for(const p of [0,1,2,3,4]){ const g=byP[p]; if(!g) continue; const n=Object.values(g).reduce((s,a)=>s+a.length,0);
-    h+=`<details class="salidas"${S.cZoneOpen===p?" open":""} data-czone="${p}"><summary><span><span class="ans" style="--pc:var(--p${p})"><i></i>${PSHORT[p]}</span></span><span class="muted">${n} ubicaciones</span></summary>`;
+    h+=`<details class="salidas"${S.cZoneOpen===p+cBlock()?" open":""} data-czone="${p}"><summary><span><span class="ans" style="--pc:var(--p${p})"><i></i>${PSHORT[p]}</span></span><span class="muted">${n} ubicaciones</span></summary>`;
     for(const t of types){ const arr=g[t]; if(!arr) continue; arr.sort((a,b)=>ITEMS[a][1].localeCompare(ITEMS[b][1],"es"));
       h+=`<div class="eyebrow" style="margin:10px 0 4px">${esc(t)} · ${arr.length}</div><div class="fails">${arr.map(id=>{ const it=ITEMS[id]; return `<div class="f"><span>${it[5]!=null?`<button class="linkbtn" data-cpick="${id}" style="text-align:left">${esc(it[1])}</button>`:`${esc(it[1])} <span class="muted">· sin punto</span>`}</span><span class="muted">apoyo ${PSHORT[it[4]]||"–"}</span></div>`; }).join("")}</div>`; }
     h+=`</details>`; }
   return h+`</div></div>`;
 }
-function clockPopup(it){ return `<b>${esc(it[1])}</b><br><span style="opacity:.75">${esc(it[2])}</span><br>${ansHTML(it)}`; }
+function clockPopup(it){ return `<b>${esc(it[1])}</b><br><span style="opacity:.75">${esc(it[0]==="K"?it[2]:typeOf(it)+(it[2]&&it[0]!=="K"?" · "+String(it[2]).split("·")[0].trim():""))}</span><br>${ansHTML(it)}`; }
 function drawClockMap(){
   if(CMAP){ try{CMAP.remove();}catch{} CMAP=null; } CMARK={};
   const el=$("#cmap"); if(!el||!window.L) return;
@@ -1418,8 +1428,8 @@ function drawClockMap(){
   const rend=L.canvas({padding:.3}); const pts=[];
   for(const id of clockIds()){ const it=ITEMS[id]; if(it[5]==null) continue;
     const col=S.cHide?"#2A3440":parkColor(it[3]);
-    const mk=L.circleMarker([it[5],it[6]],{renderer:rend,radius:6,color:"#fff",weight:1.5,fillColor:col,fillOpacity:.95})
-      .bindPopup(()=> S.cHide ? `<b>${esc(it[1])}</b><br><span style="opacity:.75">${esc(it[2])}</span><br><button class="linkbtn" onclick="this.outerHTML=ansHTML(ITEMS[${id}])">Ver parques</button>` : clockPopup(it))
+    const mk=L.circleMarker([it[5],it[6]],{renderer:rend,radius:cBlock()==="E"?4.5:6,color:"#fff",weight:cBlock()==="E"?1:1.5,fillColor:col,fillOpacity:.95})
+      .bindPopup(()=> S.cHide ? `<b>${esc(it[1])}</b><br><span style="opacity:.75">${esc(typeOf(it))}</span><br><button class="linkbtn" onclick="this.outerHTML=ansHTML(ITEMS[${id}])">Ver parques</button>` : clockPopup(it))
       .addTo(m);
     CMARK[id]=mk; pts.push([it[5],it[6]]); }
   if(pts.length>1) m.fitBounds(L.latLngBounds(pts),{padding:[16,16],maxZoom:14,animate:false});
@@ -1431,7 +1441,8 @@ function bindClockMap(){
   on("#cHide",()=>{ S.cHide=!S.cHide; render(); });
   on("#cZones",()=>{ S.cZones = S.cZones===false; render(); });
   document.querySelectorAll("[data-ctype]").forEach(b=>b.addEventListener("click",()=>{ const s=clockSel(), k=b.dataset.ctype; s.has(k)?s.delete(k):s.add(k); render(); }));
-  document.querySelectorAll("[data-czone]").forEach(d=>d.addEventListener("toggle",()=>{ if(d.open) S.cZoneOpen=+d.dataset.czone; }));
+  document.querySelectorAll("[data-czone]").forEach(d=>d.addEventListener("toggle",()=>{ if(d.open) S.cZoneOpen=(+d.dataset.czone)+cBlock(); }));
+  document.querySelectorAll("[data-cblock]").forEach(b=>b.addEventListener("click",()=>{ S.cBlock=b.dataset.cblock; S.cZoneOpen=null; render(); }));
   document.querySelectorAll("[data-cpick]").forEach(b=>b.addEventListener("click",()=>{ const id=+b.dataset.cpick, it=ITEMS[id], mk=CMARK[id]; if(!CMAP||!mk) return;
     $("#cmap").scrollIntoView({behavior:"smooth",block:"center"}); CMAP.setView([it[5],it[6]],16,{animate:false}); mk.openPopup(); }));
   drawClockMap();
@@ -1803,6 +1814,7 @@ applyColors();
 fetch("data.json?v="+DATA_V).then(r=>r.json()).then(data=>{
   ITEMS = data.items; BYBLOCK = {}; DATA_BASE = data.base || ITEMS.length;
   ITEMS.forEach((it,i)=>{ (BYBLOCK[it[0]] ||= []).push(i); });
+  BYBLOCK.R = (data.key||[]).filter(i=>ITEMS[i]);
   render();
   if(window.claude && typeof window.claude.use==="function") initDb().catch(()=>{ S.dbChecked=true; render(); });
   else { S.dbChecked = true; render(); }
