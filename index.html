@@ -289,7 +289,7 @@ const firebaseConfig = {
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
 const DATA_V = "20";
-const APP_V = "25";
+const APP_V = "26";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
@@ -808,7 +808,7 @@ function recordStats(d, it, sel, sc){
   d.bk = d.bk || {}; const b=(d.bk[it[0]]||[0,0]).slice(); b[0]++; b[1]+=sc; d.bk[it[0]]=b;
 }
 function fallosHTML(){
-  let h = offlineNote();
+  let h = offlineNote() + searchHTML();
   const ready = SRS.loaded;
   const due = ready?srsDueCount():0, nw = ready?Math.min(srsNewLeft(), srsNewPick(srsNewLeft()).length):0;
   const cards = Object.keys(SRS.c);
@@ -1447,6 +1447,40 @@ function bindClockMap(){
     $("#cmap").scrollIntoView({behavior:"smooth",block:"center"}); CMAP.setView([it[5],it[6]],16,{animate:false}); mk.openPopup(); }));
   drawClockMap();
 }
+// ----- BUSCADOR -----
+const normS = s => String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/l·l/g,"ll").replace(/[^a-z0-9ñ ]/g," ").replace(/\s+/g," ").trim();
+const SKIPW = new Set(["c","calle","carrer","av","avda","avenida","avinguda","pl","plaza","placa","pg","paseo","passeig","de","del","la","les","los","las","el","els","d","l","y","i","gv","gran","via"]);
+let SIDX=null;
+function searchIndex(){ if(SIDX) return SIDX; SIDX=[]; const fl=flaggedSet(Date.now()+1);
+  ITEMS.forEach((it,i)=>{ if(!it || fl.has(i)) return; SIDX.push([i, " "+normS(it[1]+" "+(it[0]==="C"&&it[2]!=="null"?it[2]:"")+" "+(it[0]==="E"||it[0]==="M"?String(it[2]||"").split("·")[0]:""))+" "]); }); return SIDX; }
+function searchRun(q){
+  const toks=normS(q).split(" ").filter(t=>t && !SKIPW.has(t)); if(!toks.length) return [];
+  const out=[]; for(const [i,txt] of searchIndex()){ if(toks.every(t=>txt.includes(" "+t)||txt.includes(t))){ const nm=" "+normS(ITEMS[i][1])+" "; const sc=(toks.every(t=>nm.includes(" "+t))?0:1)+(ITEMS[i][0]==="C"?0:0.5)+nm.length/400; out.push([sc,i]); } }
+  return out.sort((a,b)=>a[0]-b[0]).slice(0,25).map(x=>x[1]);
+}
+function searchHTML(){
+  return `<div class="card"><h3 style="font-size:22px">Buscador</h3><p class="muted" style="margin:4px 0 8px;font-size:14px">Escribe una calle, plaza, museo o equipamiento y te digo sus parques. Sirve en castellano o en valenciano.</p>
+  <input id="srchQ" type="search" autocomplete="off" placeholder="Ej.: músico Ayllón" value="${esc(S.srchQ||"")}" style="width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card,#fff);color:inherit">
+  <div id="srchR" style="margin-top:8px"></div></div>`;
+}
+function searchResults(){
+  const box=$("#srchR"); if(!box) return; const q=S.srchQ||"";
+  if(S.srchSel!=null && ITEMS[S.srchSel]){ const it=ITEMS[S.srchSel];
+    box.innerHTML=`<div class="plaque" style="margin-top:4px"><span class="kind">${esc(kindOf(it))}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])?`<span class="info">${esc(it[2])}</span>`:""}</div>
+      <div class="verdict v1" style="margin-top:8px"><span>${ansHTML(it)}</span></div>${zonesHTML(it,null)}${mapHTML(it)}<button class="btn ghost small" id="srchBack" style="margin-top:8px">← Volver a los resultados</button>`;
+    const b=$("#srchBack"); if(b) b.addEventListener("click",()=>{ S.srchSel=null; searchResults(); });
+    const zt=$("#zonasT"); if(zt) zt.addEventListener("click",()=>{ S.zonas=!zonasOn(); try{ localStorage.setItem("cbl.zonas",S.zonas?"1":"0"); }catch{} searchResults(); });
+    drawMap(); return; }
+  if(normS(q).length<2){ box.innerHTML=""; return; }
+  const ids=searchRun(q);
+  box.innerHTML = ids.length ? `<div class="fails">${ids.map(i=>{ const it=ITEMS[i]; return `<div class="f"><button class="linkbtn" data-ssel="${i}" style="text-align:left">${esc(it[1])}</button><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><span class="muted" style="font-size:12px">${esc(it[0]==="C"?"Calle":kindOf(it))}</span>${ansHTML(it)}</span></div>`; }).join("")}</div>` : `<p class="muted" style="margin:6px 0 0">No encuentro nada con eso.</p>`;
+  box.querySelectorAll("[data-ssel]").forEach(b=>b.addEventListener("click",()=>{ S.srchSel=+b.dataset.ssel; searchResults(); }));
+}
+function bindSearch(){
+  const inp=$("#srchQ"); if(!inp) return;
+  let t=null; inp.addEventListener("input",()=>{ S.srchQ=inp.value; S.srchSel=null; clearTimeout(t); t=setTimeout(searchResults,120); });
+  searchResults();
+}
 let HMAP=null;
 function drawHeat(){
   if(HMAP){ try{HMAP.remove();}catch{} HMAP=null; }
@@ -1548,7 +1582,7 @@ function quizHTML(){
   const got = q.results.reduce((s,r)=>s+r.sc,0);
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got)} pts</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
-    <div class="plaque"><span class="kind">${esc(kindOf(it))}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])&&(q.mode==="daily"||S.free.addr||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
+    <div class="plaque"><span class="kind">${esc(kindOf(it))}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])&&(q.mode==="daily"||(S.free.addr&&!(q.mode==="free"&&S.free.blocks.has("R")&&!S.free.blocks.has("E")&&(BYBLOCK.R||[]).includes(id)))||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
   const isS = it[0]==="S";
   const btns = (row) => (isS?SZONES:PARKS).map((_,i)=>{
     let cls = "", pressed = row==="multi"?q.sel.multi.has(i):q.sel[row]===i;
@@ -1712,6 +1746,7 @@ function bindView(){
   on("#pcolReset", ()=>{ S.colors=[]; saveColors(); render(); });
   on("#addrT", ()=>{ S.free.addr = !S.free.addr; render(); });
   if(S.view==="libre" && !S.quiz) bindClockMap();
+  if(S.view==="fallos" && !S.quiz) bindSearch();
   on("#quitQ", ()=>{ const q=S.quiz; if(q.mode==="surv" && q.results.length && S.db && S.pid) mutateDay(today(), d=>addSurv(d, q.results.length)); S.quiz=null; render(); });
   on("#startSurv", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("surv", sample(activePool(BYBLOCK.C), 400, Math.random)); });
   document.querySelectorAll("[data-sort]").forEach(b=>b.addEventListener("click",()=>{ S.rankSort=b.dataset.sort; render(); }));
