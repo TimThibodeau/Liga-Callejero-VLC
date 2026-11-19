@@ -289,7 +289,7 @@ const firebaseConfig = {
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
 const DATA_V = "20";
-const APP_V = "26";
+const APP_V = "27";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
@@ -1460,7 +1460,7 @@ function searchRun(q){
 }
 function searchHTML(){
   return `<div class="card"><h3 style="font-size:22px">Buscador</h3><p class="muted" style="margin:4px 0 8px;font-size:14px">Escribe una calle, plaza, museo o equipamiento y te digo sus parques. Sirve en castellano o en valenciano.</p>
-  <input id="srchQ" type="search" autocomplete="off" placeholder="Ej.: músico Ayllón" value="${esc(S.srchQ||"")}" style="width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card,#fff);color:inherit">
+  <input id="srchQ" type="search" autocomplete="off" placeholder="Ej.: músico Ayllón" value="${esc(S.srchQ||"")}" style="width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--ink);caret-color:var(--ink)">
   <div id="srchR" style="margin-top:8px"></div></div>`;
 }
 function searchResults(){
