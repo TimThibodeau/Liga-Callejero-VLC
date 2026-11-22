@@ -96,6 +96,19 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .rbar{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-top:8px}.rbar i{display:block;height:100%;background:var(--brand);border-radius:99px}
 .dalma{display:flex;gap:14px;align-items:center}.dalma svg{flex:none}
 .aviso-kind{color:var(--bad)!important}
+.ff{position:relative;flex:none;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.ff .fig{width:100%;height:100%;transform-origin:50% 100%}
+.ff:hover .fig{animation:ffhop .5s ease-out}
+.ff.a1 .fig{animation:ffhop .6s ease-out}.ff.a2 .fig{animation:ffwave .8s ease-in-out}.ff.a3 .fig{animation:ffspin .7s ease-in-out}.ff.a4 .fig{animation:ffsquash .6s ease-out}
+@keyframes ffhop{0%,100%{transform:translateY(0)}35%{transform:translateY(-16px) rotate(-4deg)}60%{transform:translateY(0) scaleY(.92)}80%{transform:translateY(-4px)}}
+@keyframes ffwave{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg)}40%{transform:rotate(8deg)}60%{transform:rotate(-6deg)}80%{transform:rotate(4deg)}}
+@keyframes ffspin{0%{transform:perspective(300px) rotateY(0)}100%{transform:perspective(300px) rotateY(360deg)}}
+@keyframes ffsquash{0%,100%{transform:scale(1,1)}30%{transform:scale(1.15,.82)}55%{transform:scale(.9,1.12) translateY(-8px)}80%{transform:scale(1.04,.96)}}
+.bubble{position:absolute;bottom:100%;right:0;width:max-content;max-width:210px;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.18);border-radius:12px;padding:8px 10px;font-size:13px;line-height:1.3;z-index:5;text-align:left;animation:bub .25s ease-out;pointer-events:none}
+.bubble::after{content:"";position:absolute;top:100%;right:26px;border:7px solid transparent;border-top-color:var(--surface)}
+.ffc .bubble{right:auto;left:50%;transform:translateX(-50%)}.ffc .bubble::after{right:auto;left:50%;margin-left:-7px}
+@keyframes bub{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
+.ffc .bubble{animation:bubc .25s ease-out}@keyframes bubc{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}
 .progress{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
 .progress i{display:block;height:100%;background:var(--brand);transition:width .25s}
 .plaque{background:var(--plaque-bg);color:var(--plaque-ink);border:3px solid var(--plaque-rim);border-radius:14px;box-shadow:inset 0 0 0 4px var(--plaque-bg),inset 0 0 0 5.5px var(--plaque-rim);padding:22px 20px;text-align:center;min-height:132px;display:flex;flex-direction:column;justify-content:center;gap:6px}
@@ -139,7 +152,8 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .who b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .who .nm{display:flex;flex-direction:column;min-width:0}
 .msg{font-size:13px;color:var(--muted);font-style:italic;white-space:normal;overflow-wrap:anywhere}
-.crown{color:var(--brand);font-weight:700}
+.crown{font-weight:400}
+.medal{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--mc);border:1px solid rgba(0,0,0,.35);margin-left:2px;vertical-align:-1px}.medal.off{background:transparent;border:1px dashed var(--muted);opacity:.6}
 .feed{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .feed .ev{display:flex;gap:10px;align-items:center;font-size:14px}
 .feed .ev>span:nth-child(2){flex:1;min-width:0}
@@ -296,7 +310,7 @@ const firebaseConfig = {
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
 const DATA_V = "20";
-const APP_V = "29";
+const APP_V = "31";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
@@ -432,7 +446,7 @@ function weekWinner(ws){
   return best;
 }
 function lastChampion(){ return weekWinner(addDays(weekStart(today()),-7)); }
-function whoHTML(pid, msg){ const crown = S.champ===pid ? ` <span class="crown" title="Campeón de la semana pasada">♛</span>` : ""; return `<div class="who">${avatar(pid)}<span class="nm"><b>${esc(aliasOf(pid))}${crown}</b>${msg?`<span class="msg">“${esc(msg)}”</span>`:""}</span></div>`; }
+function whoHTML(pid, msg){ const crown = S.champ===pid ? ` <span class="crown" title="Campeón de la semana pasada">🏆</span>` : ""; return `<div class="who">${avatar(pid)}<span class="nm"><b>${esc(aliasOf(pid))}${crown}</b>${msg?`<span class="msg">“${esc(msg)}”</span>`:""}</span></div>`; }
 function ago(t){ const m=Math.round((Date.now()-t)/60000); if(m<1) return "ahora"; if(m<60) return `hace ${m} min`; const hh=Math.round(m/60); if(hh<24) return `hace ${hh} h`; return `hace ${Math.round(hh/24)} d`; }
 
 // ---------- persistence ----------
@@ -494,12 +508,20 @@ function streak(pid){
 }
 // ----- RANGOS -----
 const RANK_LOOK=["gorra de academia","casco amarillo y manguera","casco rojo y hacha","casco naranja, hacha y ERA","casco plata, hacha y ERA","casco blanco, ERA, emisora y galones","casco blanco con franja dorada y tres estrellas"];
-const RANKS=[[0,"Aspirante"],[150,"Bombero"],[400,"Cabo"],[800,"Sargento"],[1300,"Suboficial"],[2000,"Oficial"],[3000,"Jefe de parque"]];
-function rankScore(lo){ let n=0; if(lo) for(const k in lo){ if(lo[k]===1 && ITEMS[k] && ITEMS[k][0]!=="S") n++; } return n; }
-function rankOf(pid){ const lo = pid===S.pid && SRS.loaded ? SRS.lo : BAR.lo[pid]; if(!lo) return null; const n=rankScore(lo); let i=0; while(i+1<RANKS.length && n>=RANKS[i+1][0]) i++; return {i,n,name:RANKS[i][1],next:RANKS[i+1]||null,base:RANKS[i][0]}; }
+// Rango: sitios dominados = acertados (los dos parques) las 3 últimas veces seguidas.
+const RANKS=[[0,"Aspirante"],[300,"Bombero"],[750,"Cabo"],[1400,"Sargento"],[2200,"Suboficial"],[3200,"Oficial"],[4400,"Jefe de parque"]];
+// Hoja de servicio: medallas por bloque (% del bloque dominado). Bronce 50 %, plata 75 %, oro 90 %.
+const MEDB=[["C","Calles"],["E","Equipamientos"],["K","CLOCK"],["M","Museos y monumentos"],["H","Hospitales"]];
+const MEDT=[50,75,90], MEDC=["#B87333","#C8D0D8","#E8B23A"], MEDN=["Bronce","Plata","Oro"];
+const isDom = v => v==="111";
+function hOf(pid){ return pid===S.pid && SRS.loaded ? SRS.h : BAR.h[pid]; }
+function rankScore(h){ let n=0; if(h) for(const k in h){ const it=ITEMS[k]; if(isDom(h[k]) && it && it[0]!=="S" && it[0]!=="J") n++; } return n; }
+function medalsOf(h){ return MEDB.map(([b,name])=>{ const ids=BYBLOCK[b]||[]; let d=0; if(h) for(const i of ids) if(isDom(h[i])) d++; const p=ids.length?100*d/ids.length:0; let t=-1; MEDT.forEach((x,k)=>{ if(p>=x) t=k; }); return {b,name,d,tot:ids.length,p,t}; }); }
+function rankOf(pid){ const h=hOf(pid); if(!h) return null; const n=rankScore(h); let i=0; while(i+1<RANKS.length && n>=RANKS[i+1][0]) i++;
+  const med=medalsOf(h); return {i,n,name:RANKS[i][1],next:RANKS[i+1]||null,base:RANKS[i][0],med,mt:med.filter(m=>m.t>=0).length}; }
 function rankTag(pid){ const r=rankOf(pid); return r?`<span class="rank">${"★".repeat(r.i)||"·"} ${esc(r.name)}</span>`:""; }
 // ----- PERSONAJE POR RANGO -----
-function firefighterSVG(rank, uid){
+function firefighterSVG(rank, uid, med){
   // rank: 0 Aspirante,1 Bombero,2 Cabo,3 Sargento,4 Suboficial,5 Oficial,6 Jefe
   const H=[["#22324A","#16233A"],["#F4C21B","#C99A08"],["#D7261E","#9E1610"],["#F07B12","#B8560A"],["#B9C2CC","#808B97"],["#F5F5F2","#C9CCCF"],["#F5F5F2","#C9CCCF"]][rank];
   const id="f"+uid;
@@ -512,6 +534,7 @@ function firefighterSVG(rank, uid){
   const radio = rank>=5 ? `<rect x="80" y="74" width="9" height="16" rx="2" fill="#15212C"/><rect x="83" y="66" width="2" height="9" fill="#15212C"/><rect x="82" y="78" width="5" height="4" fill="#4CC08A"/>` : "";
   const hose = rank===1 ? `<path d="M30 140 q-14 -10 -6 -30 q6 -14 12 -22" stroke="#C42A1C" stroke-width="5" fill="none" stroke-linecap="round"/><rect x="33" y="82" width="7" height="10" rx="2" fill="#B9C2CC"/>` : "";
   const stars = rank>=5 ? `<g fill="#E8B23A">${[0,1,2].slice(0,rank===6?3:2).map(k=>`<path transform="translate(${50+k*8} 76)" d="M0 -3 l1 2 2 .3 -1.5 1.4 .4 2.1 -1.9 -1 -1.9 1 .4 -2.1 -1.5 -1.4 2 -.3z"/>`).join("")}</g>` : "";
+  const ms=(med||[]).filter(m=>m.t>=0); const medals = ms.length ? `<g>${ms.map((m,k)=>{ const x=43+k*4.6; return `<rect x="${x-1.6}" y="80" width="3.2" height="4" fill="${["#C42A1C","#1F6FD1","#2E9E5B","#8E44AD","#E7E9EC"][MEDB.findIndex(b=>b[0]===m.b)]}"/><circle cx="${x}" cy="86.5" r="2.3" fill="${MEDC[m.t]}" stroke="#15212C" stroke-width=".5"/>`; }).join("")}</g>` : "";
   const stripe = cap ? "" : `<rect x="40" y="96" width="40" height="5" fill="#E7E9EC"/><rect x="40" y="97.5" width="40" height="2" fill="#F4C21B"/>`;
   return `<svg viewBox="0 0 120 170" width="100%" height="100%" role="img" aria-label="Bombero">
   <defs><linearGradient id="${id}h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${H[0]}"/><stop offset="1" stop-color="${H[1]}"/></linearGradient>
@@ -527,7 +550,7 @@ function firefighterSVG(rank, uid){
   <path d="M60 64 v66" stroke="#111A24" stroke-width="1.5"/>
   ${stripe}
   ${cap?`<text x="60" y="88" text-anchor="middle" font-size="7" font-family="Arial" font-weight="700" fill="#F4C21B">BOMBERS</text>`:`<rect x="40" y="118" width="40" height="5" fill="#E7E9EC"/><rect x="40" y="119.5" width="40" height="2" fill="#F4C21B"/>`}
-  ${stars}
+  ${stars}${medals}
   <path d="M38 68 q-10 6 -12 32 l8 2 q2 -20 8 -26z" fill="url(#${id}j)"/><path d="M82 68 q10 6 12 32 l-8 2 q-2 -20 -8 -26z" fill="url(#${id}j)"/>
   ${cap?"":`<path d="M27 92 l8 2 -.6 4 -8 -2z" fill="#E7E9EC"/><path d="M93 92 l-8 2 .6 4 8 -2z" fill="#E7E9EC"/>`}
   <circle cx="30" cy="104" r="5.5" fill="#15212C"/><circle cx="90" cy="104" r="5.5" fill="#15212C"/>
@@ -541,11 +564,57 @@ function firefighterSVG(rank, uid){
   ${axe}${hose}
   </svg>`;
 }
+function ffSlot(pid, w, center){ const r=rankOf(pid); if(!r) return ""; return `<div class="ff${center?" ffc":""}" data-ff="${esc(pid)}" role="button" tabindex="0" aria-label="Tu bombero" style="width:${w}px;height:${Math.round(w*1.42)}px${center?";margin:0 auto":""}"><div class="fig">${firefighterSVG(r.i,"s"+pid+w,r.med)}</div></div>`; }
+const GAGS=[
+ "Si me preguntan por la C/ de la Paz, digo Norte–Sur y salgo corriendo.",
+ "Me he perdido en el Cabanyal. Otra vez. Todas las calles se parecen.",
+ "Llevo tres vueltas a la rotonda de la Plaza de España. Ya me saluda el guardia.",
+ "¿Ronda Norte o Ronda Sur? …¿Ronda de horchatas?",
+ "Las Torres de Serranos no se mueven. Yo sí me equivoco de parque.",
+ "En Fallas cambio la manguera por un cubo de horchata. Es broma. O no.",
+ "Si ves humo en la Ciudad de las Artes, igual solo es una paella.",
+ "El Micalet tiene más de 200 escalones. Yo los subo con el ERA puesto.",
+ "¿Calle o carrer? Da igual: lo importante es llegar el primero.",
+ "Un acierto más y me dan otro casco. Este ya me aprieta.",
+ "Benimaclet, Benicalap, Benimàmet… ¿quién puso tantos Beni?",
+ "Si el GPS dice «gire a la derecha» en Ciutat Vella, desconfía.",
+ "La Albufera es del Saler. Los mosquitos, de todos.",
+ "Me sé la Gran Vía de memoria. La de Fernando el Católico, la otra no tanto.",
+ "Hoy he soñado con la Avenida del Puerto. Era infinita.",
+ "El jefe final del domingo no me da miedo. Bueno, un poco.",
+ "Pasarela, puente o paso subterráneo: yo cruzo el Turia como sea.",
+ "Mestalla es Norte–Sur. Me lo voy a tatuar.",
+ "¿Que no me toque Campanar? Pues ahora toca Campanar.",
+ "Si dudas entre Oeste y Campanar… di Oeste. (Esto no es un consejo oficial.)"
+];
+function ffGag(pid){
+  const r=rankOf(pid), C=BYBLOCK.C||[], rnd=Math.random();
+  if(rnd<0.35 && C.length){ for(let k=0;k<20;k++){ const id=C[Math.floor(Math.random()*C.length)], it=ITEMS[id]; if(it && !Array.isArray(it[3]) && it[4]>=0) return `Truco: <b>${esc(it[1])}</b> → ${PSHORT[it[3]]}–${PSHORT[it[4]]}. De nada.`; } }
+  if(rnd<0.45 && r && r.next) return `Me faltan <b>${(r.next[0]-r.n).toLocaleString("es-ES")}</b> sitios para ser ${esc(r.next[1])}. ¡A por ellos!`;
+  if(rnd<0.48 && r && !r.next){ const m=r.med.filter(x=>x.t<2).sort((a,b)=>b.p-a.p)[0]; if(m) return `Rango máximo, sí. Pero en <b>${esc(m.name)}</b> voy al ${Math.round(m.p)} %. Sin medalla de oro no me jubilo.`; }
+  if(rnd<0.52){ const st=streak(pid); if(st>1) return `Llevamos <b>${st}</b> días seguidos de reto. Aquí no libra nadie.`; }
+  if(pid!==S.pid) return `Soy ${esc(aliasOf(pid))}, ${esc(r?r.name.toLowerCase():"aspirante")}. ${GAGS[Math.floor(Math.random()*GAGS.length)]}`;
+  return GAGS[Math.floor(Math.random()*GAGS.length)];
+}
+function bindFF(){
+  document.querySelectorAll("[data-ff]").forEach(el=>{
+    const go=()=>{ const a="a"+(1+Math.floor(Math.random()*4)); el.classList.remove("a1","a2","a3","a4"); void el.offsetWidth; el.classList.add(a);
+      document.querySelectorAll(".bubble").forEach(b=>b.remove());
+      const b=document.createElement("div"); b.className="bubble"; b.innerHTML=ffGag(el.dataset.ff); el.appendChild(b);
+      clearTimeout(el._t); el._t=setTimeout(()=>{ b.remove(); el.classList.remove(a); }, 4200);
+      if(navigator.vibrate){ try{navigator.vibrate(15);}catch{} } };
+    el.addEventListener("click",go); el.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); } });
+  });
+}
 function rankCardHTML(){
   const r=rankOf(S.pid); if(!r) return "";
   const pct = r.next ? Math.min(100,Math.round(100*(r.n-r.base)/(r.next[0]-r.base))) : 100;
-  return `<div class="card"><div style="display:flex;gap:14px;align-items:center"><div style="width:96px;height:136px;flex:none">${firefighterSVG(r.i,"me")}</div><div style="min-width:0;flex:1"><div class="eyebrow">Tu rango</div><h3 style="font-size:26px;margin-top:2px">${"★".repeat(r.i)} ${esc(r.name)}</h3><span class="muted" style="font-size:14px">${r.n.toLocaleString("es-ES")} sitios dominados</span>${r.next?`<p class="muted" style="margin:4px 0 0;font-size:13px">Siguiente: <b>${esc(r.next[1])}</b> · ${RANK_LOOK[r.i+1]}</p>`:""}</div></div>
-    <div class="rbar"><i style="width:${pct}%"></i></div><p class="muted" style="margin:6px 0 0;font-size:13px">${r.next?`Te faltan <b>${(r.next[0]-r.n).toLocaleString("es-ES")}</b> para <b>${esc(r.next[1])}</b>.`:"Rango máximo."} Cuenta cada sitio cuya última respuesta fue un acierto completo: si lo fallas, deja de contar. Calidad, no cantidad.</p></div>`;
+  return `<div class="card"><div style="display:flex;gap:14px;align-items:center">${ffSlot(S.pid,96)}<div style="min-width:0;flex:1"><div class="eyebrow">Tu rango</div><h3 style="font-size:26px;margin-top:2px">${"★".repeat(r.i)} ${esc(r.name)}</h3><span class="muted" style="font-size:14px">${r.n.toLocaleString("es-ES")} sitios dominados · ${r.mt} medalla${r.mt===1?"":"s"}</span>${r.next?`<p class="muted" style="margin:4px 0 0;font-size:13px">Siguiente: <b>${esc(r.next[1])}</b> · ${RANK_LOOK[r.i+1]}</p>`:""}</div></div>
+    <div class="rbar"><i style="width:${pct}%"></i></div><p class="muted" style="margin:6px 0 0;font-size:13px">${r.next?`Te faltan <b>${(r.next[0]-r.n).toLocaleString("es-ES")}</b> para <b>${esc(r.next[1])}</b>.`:"Rango máximo. Ahora, a por el oro en todo."} Un sitio está dominado cuando lo aciertas completo <b>tres veces seguidas</b>; si lo fallas, deja de contar hasta que vuelvas a encadenar tres.</p>
+    <details class="salidas" style="margin-top:10px"${r.next?"":" open"}><summary><span><b>Hoja de servicio</b></span><span class="muted">${r.med.map(m=>m.t>=0?`<i class="medal" style="--mc:${MEDC[m.t]}"></i>`:`<i class="medal off"></i>`).join("")}</span></summary>
+    <p class="muted" style="margin:6px 0 8px;font-size:13px">Medalla por bloque según el % que tienes dominado: bronce 50 %, plata 75 %, oro 90 %. Salen en el pecho de tu bombero.</p>
+    ${r.med.map(m=>{ const nx=MEDT[m.t+1]; const need=nx?Math.max(0,Math.ceil(m.tot*nx/100)-m.d):0; return `<div style="margin-top:8px"><div class="spread" style="font-size:14px"><span>${m.t>=0?`<i class="medal" style="--mc:${MEDC[m.t]}"></i> `:""}<b>${esc(m.name)}</b>${m.t>=0?` <span class="muted">· ${MEDN[m.t]}</span>`:""}</span><span class="muted">${m.d.toLocaleString("es-ES")} / ${m.tot.toLocaleString("es-ES")} · ${Math.floor(m.p)} %</span></div><div class="rbar" style="height:6px;margin-top:4px"><i style="width:${Math.min(100,m.p)}%;background:${m.t>=0?MEDC[m.t]:"var(--muted)"}"></i></div>${nx?`<div class="muted" style="font-size:12px;margin-top:2px">${need.toLocaleString("es-ES")} más para ${MEDN[m.t+1].toLowerCase()}</div>`:""}</div>`; }).join("")}
+    </details></div>`;
 }
 // ----- COMBOS -----
 const comboMult = c => c>=10 ? 1.5 : 1;
@@ -585,11 +654,10 @@ function bossHTML(){
   const t=today(), fri=lastSunday(t); if(addDays(fri,1)<t) return "";
   const ids=bossIds(fri); if(ids.length<5) return "";
   const mine=myDays()[fri]?.jf, done=!!mine?.done, isToday = fri===t;
-  const ps=playerList().map(p=>({p,j:S.days[p.id]?.[fri]?.jf})).filter(x=>x.j?.done).sort((a,b)=>(b.j.pts-a.j.pts)||(a.j.ms-b.j.ms));
-  let h=`<div class="card" style="border:2px solid var(--brand)"><div class="eyebrow" style="color:var(--brand)">${isToday?"Hoy es domingo":"Resultado del "+esc(longDate(fri))}</div><div class="spread" style="margin-top:4px"><div style="flex:1 1 240px;min-width:0"><h2 style="font-size:30px">Jefe final</h2><p class="muted" style="margin:4px 0 0">Los ${ids.length} sitios que más ha fallado el grupo de lunes a sábado. Un solo intento; gana quien más acierte y, si empatan, quien tarde menos.</p></div>${done?`<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ ${ids.length} · ${fmtT(mine.ms||0)}</span></div>`:""}</div>`;
+  const prev=[]; for(let k=1;k<=8;k++){ const j=myDays()[addDays(fri,-7*k)]?.jf; if(j?.done) prev.push(j.pts); } const best=prev.length?Math.max(...prev):null;
+  let h=`<div class="card" style="border:2px solid var(--brand)"><div class="eyebrow" style="color:var(--brand)">${isToday?"Hoy es domingo":"Resultado del "+esc(longDate(fri))}</div><div class="spread" style="margin-top:4px"><div style="flex:1 1 240px;min-width:0"><h2 style="font-size:30px">Jefe final</h2><p class="muted" style="margin:4px 0 0">Los ${ids.length} sitios que más ha fallado el grupo de lunes a sábado. Son los más puñeteros, así que no es una competición: un solo intento para ver cuántos sacarías tú. No suma puntos.</p></div>${done?`<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ ${ids.length} · ${fmtT(mine.ms||0)}</span></div>`:""}</div>`;
   if(!done && isToday) h+=`<div class="row" style="margin-top:12px"><button class="btn" id="startBoss">${mine?.ans?.length?`Seguir (${mine.ans.length}/${ids.length})`:"Enfrentarse al jefe"}</button></div>`;
-  if(ps.length && (done || !isToday)) h+=`<div class="fails" style="margin-top:12px">${ps.map((x,i)=>`<div class="f"><span>${i===0?"🏆 ":""}${whoHTML(x.p.id)}</span><span class="num">${fmt(x.j.pts)} · ${fmtT(x.j.ms||0)}</span></div>`).join("")}</div>`;
-  else if(ps.length) h+=`<p class="muted" style="margin:10px 0 0;font-size:13px">${ps.length} ${ps.length===1?"ya lo ha":"ya lo han"} derrotado. Verás sus notas cuando juegues.</p>`;
+  if(prev.length) h+=`<p class="muted" style="margin:10px 0 0;font-size:13px">Tus domingos anteriores: ${prev.slice(0,4).map(x=>`<b>${fmt(x)}</b>`).join(" · ")}${done&&mine.pts>best?" · <b style=\"color:var(--ok,#4CC08A)\">¡Récord personal!</b>":""}</p>`;
   return h+`</div>`;
 }
 function playerList(){ return Object.entries(S.players).map(([id,p])=>({id,...p})).sort((a,b)=>(a.since||0)-(b.since||0)); }
@@ -647,12 +715,12 @@ function hoyHTML(){
   const done = !!mine?.done; const started = mine && !done && (mine.ans||[]).length>0;
   let h = offlineNote();
   const rc = rankCardHTML();
-  h += `<div class="card"><div class="eyebrow">${esc(longDate(ds))}</div><div class="spread" style="margin-top:6px">
+  h += `<div class="card" style="display:flex;gap:8px;align-items:flex-end"><div style="flex:1;min-width:0"><div class="eyebrow">${esc(longDate(ds))}</div><div class="spread" style="margin-top:6px">
     <div><h2 style="font-size:30px">Reto del día</h2><p class="muted" style="margin:4px 0 0">${dailyIds(ds).length} preguntas, las mismas para todos: ${mixText(dailyPlan(ds).mix)}. Solo vale el primer intento. En empate gana quien tarde menos.</p></div>`;
   if(done) h += `<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ ${mine.n||dailyIds(ds).length} · ${fmtT(mine.ms||0)}</span></div>`;
   h += `</div>`;
   if(!done) h += `<div class="row" style="margin-top:14px"><button class="btn" id="startDaily">${started?`Seguir (${mine.ans.length}/${dailyIds(ds).length})`:"Empezar reto"}</button></div>`;
-  h += `</div>`;
+  h += `</div>${ffSlot(S.pid,84)}</div>`;
   if(done && S.db && S.canWrite) h += `<form class="card" id="msgForm" style="display:flex;flex-direction:column;gap:8px"><label class="eyebrow" for="msgIn">Tu pulla del día</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="msgIn" maxlength="80" placeholder="Ej.: Mañana os vuelvo a barrer" value="${esc(mine.msg||"")}"><button class="btn small" type="submit">${mine.msg?"Cambiar":"Publicar"}</button></div><span class="muted" style="font-size:13px">Sale junto a tu nota en la clasificación de hoy. Los demás la ven cuando terminan su reto.</span></form>`;
   h += bossHTML();
   // status of others
@@ -761,7 +829,7 @@ function rankHTML(){
 function dotacionHTML(){
   const ps=playerList().map(p=>({p,r:rankOf(p.id)})).filter(x=>x.r).sort((a,b)=>b.r.n-a.r.n);
   if(!ps.length) return "";
-  return `<div class="card"><div class="spread"><h3 style="font-size:24px">La dotación</h3><span class="muted" style="font-size:13px">Rango por sitios dominados</span></div><div style="display:flex;gap:6px;justify-content:space-around;flex-wrap:wrap;margin-top:8px">${ps.map(x=>`<div style="flex:1 1 0;min-width:0;max-width:130px;text-align:center"><div style="width:80px;height:113px;margin:0 auto">${firefighterSVG(x.r.i,x.p.id)}</div><div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(aliasOf(x.p.id))}</div><div class="rank" style="margin:0">${"★".repeat(x.r.i)} ${esc(x.r.name)}</div><div class="muted" style="font-size:12px">${x.r.n.toLocaleString("es-ES")}</div></div>`).join("")}</div></div>`;
+  return `<div class="card"><div class="spread"><h3 style="font-size:24px">La dotación</h3><span class="muted" style="font-size:13px">Dominados = 3 aciertos seguidos</span></div><div style="display:flex;gap:6px;justify-content:space-around;flex-wrap:wrap;margin-top:8px">${ps.map(x=>`<div style="flex:1 1 0;min-width:0;max-width:130px;text-align:center">${ffSlot(x.p.id,80,true)}<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(aliasOf(x.p.id))}</div><div class="rank" style="margin:0">${"★".repeat(x.r.i)} ${esc(x.r.name)}</div><div class="muted" style="font-size:12px">${x.r.n.toLocaleString("es-ES")}${x.r.mt?` · ${x.r.med.filter(m=>m.t>=0).map(m=>`<i class="medal" style="--mc:${MEDC[m.t]}" title="${esc(m.name)}: ${MEDN[m.t]}"></i>`).join("")}`:""}</div></div>`).join("")}</div></div>`;
 }
 function ligaHTML(){
   if(S.db && Date.now()-BAR.loAt>120000) setTimeout(()=>loadAllLo(false),0);
@@ -853,6 +921,7 @@ function loSeed(){
   SRS.cfg.lo1=1; srsSave();
 }
 const hCh = sc => sc>=1?"1":sc>=0.5?"m":"0";
+function hFill(h,lo){ const o={...h}; for(const k in lo) if(!o[k]) o[k]=hCh(lo[k]); return o; }
 function hPush(id,sc){ SRS.h[id]=((SRS.h[id]||"")+hCh(sc)).slice(-3); }
 // Últimas 3 respuestas por calle. Se reconstruyen en cada carga con todo lo guardado (retos, entreno, fallos,
 // duelos y repaso) y se juntan con lo guardado: si otra pestaña con una versión vieja lo borró, se recupera solo.
@@ -1327,7 +1396,7 @@ function bindRoutes(){
 
 // ----- BARRIOS E INSIGNIAS -----
 const DISTRITOS = {1:"Ciutat Vella",2:"L'Eixample",3:"Extramurs",4:"Campanar",5:"La Saïdia",6:"El Pla del Real",7:"L'Olivereta",8:"Patraix",9:"Jesús",10:"Quatre Carreres",11:"Poblats Marítims",12:"Camins al Grau",13:"Algirós",14:"Benimaclet",15:"Rascanya",16:"Benicalap",17:"Pobles del Nord",18:"Pobles de l'Oest",19:"Pobles del Sud"};
-const BAR = {state:"idle", list:[], of:{}, byId:{}, lo:{}, loAt:0, fr:[]};
+const BAR = {state:"idle", list:[], of:{}, byId:{}, lo:{}, h:{}, loAt:0, fr:[]};
 const LVL=["Sin insignia","Bronce","Plata","Oro"], LVLC=["#9AA7B3","#B87333","#A8B3BD","#E0B12E"];
 function propsOf(f){ const p=f.properties||{}; const g=(...ks)=>{ for(const k of ks){ const v=p[k]??p[k.toUpperCase()]; if(v!=null&&v!=="") return v; } return null; };
   const nm=String(g("nombre","barrio","nom","nombre_barrio","nom_barri")||"Barrio");
@@ -1369,9 +1438,9 @@ function frontierGroups(){
   return Object.entries(groups).filter(([,v])=>v.length>=15).map(([k,v])=>({id:k, a:+k.split("-")[0], b:+k.split("-")[1], items:v})).sort((x,y)=>y.items.length-x.items.length);
 }
 async function loadAllLo(force){
-  if(S.pid && SRS.loaded) BAR.lo[S.pid]=SRS.lo;
+  if(S.pid && SRS.loaded){ BAR.lo[S.pid]=SRS.lo; BAR.h[S.pid]=SRS.h; }
   if(!S.db || (!force && Date.now()-BAR.loAt<120000)) return; BAR.loAt=Date.now();
-  await Promise.all(playerList().filter(p=>p.id!==S.pid).map(async p=>{ try{ const d=await S.db.doc(`players/${p.id}/srs/main`).get(); BAR.lo[p.id]=d.exists?((d.data()||{}).lo||{}):{}; }catch{ BAR.lo[p.id]={}; } }));
+  await Promise.all(playerList().filter(p=>p.id!==S.pid).map(async p=>{ try{ const d=await S.db.doc(`players/${p.id}/srs/main`).get(); const v=d.exists?(d.data()||{}):{}; BAR.lo[p.id]=v.lo||{}; BAR.h[p.id]=hFill(v.h||{},v.lo||{}); }catch{ BAR.lo[p.id]={}; BAR.h[p.id]={}; } }));
   if(S.view==="rank" && !S.quiz) render();
 }
 function levelOf(items, lo){
@@ -1832,6 +1901,7 @@ function drawMap(){
 function next(){ const q=S.quiz; if(q.mode==="srs" && q.results.length && q.results[q.results.length-1].sc<1 && !q.req.has(q.ids[q.i])){ q.req.add(q.ids[q.i]); q.ids.push(q.ids[q.i]); } if(q.mode==="surv" && q.results.length && q.results[q.results.length-1].sc<1){ q.i=q.ids.length; q.answered=false; render(); return; } q.i++; q.answered=false; q.vp=null; q.sel={p:null,a:null,multi:new Set()}; q.t0=performance.now(); render(); }
 
 function bindView(){
+  setTimeout(bindFF,0);
   const on = (sel, fn) => { const el=$(sel); if(el) el.addEventListener("click", fn); };
   on("#startDaily", ()=>{ if(S.db && !S.flagsLoaded) return; if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("daily", dailyIds(today())); });
   on("#startFree", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); });
