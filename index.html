@@ -315,7 +315,7 @@ const firebaseConfig = {
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
 const DATA_V = "20";
-const APP_V = "34";
+const APP_V = "35";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
@@ -520,10 +520,10 @@ function streak(pid){
 }
 // ----- RANGOS -----
 const RANK_LOOK=["gorra de academia","gorra y manguera","casco amarillo y manguera","casco rojo y hacha","casco naranja, hacha y ERA","casco blanco, ERA, emisora y galones","casco blanco con franja dorada y tres estrellas"];
-// Rango por CALIDAD: % de acierto en la última respuesta de cada sitio que has visto (como las insignias de barrio).
-// Hacer más preguntas no sube el rango; hace falta haber visto un mínimo de sitios para que cuente.
+// Rango por CALIDAD: % de acierto de los últimos 30 días (reto + entreno), el mismo acierto que la tabla de la liga.
+// Hacer más preguntas no sube el rango; hace falta un mínimo de respuestas para que cuente.
 const RANKS=[[0,"Aspirante"],[60,"Opositor"],[70,"Bombero"],[75,"Cabo"],[80,"Sargento"],[85,"Oficial"],[90,"Jefe de parque"]];
-const RANK_MIN=500;
+const RANK_MIN=150, RANK_DAYS=30;
 // Chapas por parque: acierto en los sitios de cada parque (habiendo visto al menos la mitad). Bronce 70 %, plata 85 %, oro 95 %.
 const MEDT=[70,85,95], MEDC=["#B87333","#4F8FD6","#E8B23A"], MEDN=["Bronce","Plata","Oro"], MEDCOV=0.5;
 let PKIDS=null;
@@ -532,9 +532,12 @@ function medalsOf(lo){ return parkIds().map((ids,k)=>{ let a=0,sum=0; if(lo) for
   const cov=ids.length?a/ids.length:0, acc=a?100*sum/a:0; let t=-1; if(cov>=MEDCOV) MEDT.forEach((x,j)=>{ if(acc>=x) t=j; });
   return {k,name:PSHORT[k],a,tot:ids.length,cov,acc,t}; }).filter(m=>m.tot>=10); }
 function rankScore(lo){ let n=0,sum=0; if(lo) for(const k in lo){ const it=ITEMS[k]; if(!it||it[0]==="S"||it[0]==="J") continue; n++; sum+=lo[k]; } return {n, acc:n?100*sum/n:0}; }
-function rankOf(pid){ const lo = pid===S.pid && SRS.loaded ? SRS.lo : BAR.lo[pid]; if(!lo) return null; const {n,acc}=rankScore(lo);
+function rankAcc(pid){ const d=S.days[pid]||{}, from=addDays(today(),-(RANK_DAYS-1)); let n=0, ok=0;
+  for(const ds in d){ if(ds<from) continue; const doc=d[ds]; if(doc.dy?.done){ n += doc.dy.n || (doc.dy.ans||[]).length || 10; ok += doc.dy.pts||0; } if(doc.fr){ n += doc.fr.n||0; ok += doc.fr.pts||0; } }
+  return {n, acc:n?100*ok/n:0}; }
+function rankOf(pid){ if(!S.players[pid]) return null; const lo = pid===S.pid && SRS.loaded ? SRS.lo : BAR.lo[pid]; const {n,acc}=rankAcc(pid);
   let i=0; if(n>=RANK_MIN) while(i+1<RANKS.length && acc>=RANKS[i+1][0]) i++;
-  const med=medalsOf(lo); return {i,n,acc,name:RANKS[i][1],next:RANKS[i+1]||null,base:RANKS[i][0],med,mt:med.filter(m=>m.t>=0).length,short:n<RANK_MIN}; }
+  const med=lo?medalsOf(lo):[]; return {i,n,acc,name:RANKS[i][1],next:RANKS[i+1]||null,base:RANKS[i][0],med,mt:med.filter(m=>m.t>=0).length,short:n<RANK_MIN}; }
 function rankTag(pid){ const r=rankOf(pid); return r?`<span class="rank">${esc(r.name)}</span>`:""; }
 function firefighterSVG(rank, uid, med){
   // rank: 0 Aspirante,1 Bombero,2 Cabo,3 Sargento,4 Suboficial,5 Oficial,6 Jefe
@@ -605,7 +608,7 @@ const GAGS=[
 function ffGag(pid){
   const r=rankOf(pid), C=BYBLOCK.C||[], rnd=Math.random();
   if(rnd<0.35 && C.length){ for(let k=0;k<20;k++){ const id=C[Math.floor(Math.random()*C.length)], it=ITEMS[id]; if(it && !Array.isArray(it[3]) && it[4]>=0) return `Truco: <b>${esc(it[1])}</b> → ${PSHORT[it[3]]}–${PSHORT[it[4]]}. De nada.`; } }
-  if(rnd<0.45 && r && r.short) return `Llevo <b>${r.n.toLocaleString("es-ES")}</b> sitios vistos. A los ${RANK_MIN} empiezo a tener rango.`;
+  if(rnd<0.45 && r && r.short) return `Llevo <b>${r.n.toLocaleString("es-ES")}</b> respuestas este mes. A las ${RANK_MIN} empiezo a tener rango.`;
   if(rnd<0.45 && r && r.next) return `Voy al <b>${String(r.acc.toFixed(1)).replace(".",",")} %</b>. Al ${r.next[0]} % me hacen ${esc(r.next[1].toLowerCase())}.`;
   if(rnd<0.48 && r && !r.next){ const m=r.med.filter(x=>x.t<2).sort((a,b)=>b.acc-a.acc)[0]; if(m) return `Jefe de parque, sí. Pero en <b>${esc(m.name)}</b> voy al ${Math.round(m.acc)} %. Sin chapa de oro no me jubilo.`; }
   if(rnd<0.52){ const st=streak(pid); if(st>1) return `Llevamos <b>${st}</b> días seguidos de reto. Aquí no libra nadie.`; }
@@ -639,10 +642,10 @@ function rankCardHTML(){
   const r=rankOf(S.pid); if(!r) return "";
   const pa=v=>String(v.toFixed(1)).replace(".",",")+" %";
   const pct = r.short ? Math.round(100*r.n/RANK_MIN) : r.next ? Math.max(0,Math.min(100,Math.round(100*(r.acc-r.base)/(r.next[0]-r.base)))) : 100;
-  const foot = r.short ? `Te faltan <b>${(RANK_MIN-r.n).toLocaleString("es-ES")}</b> sitios por ver para tener rango. Ahora mismo vas al ${pa(r.acc)}.`
+  const foot = r.short ? `Te faltan <b>${(RANK_MIN-r.n).toLocaleString("es-ES")}</b> respuestas en los últimos 30 días para tener rango. Ahora mismo vas al ${pa(r.acc)}.`
     : r.next ? `Al <b>${r.next[0]} %</b> eres <b>${esc(r.next[1])}</b> (${RANK_LOOK[r.i+1]}).` : "Lo máximo. Ahora, a por el oro en todos los parques.";
-  return `<div class="card"><div style="display:flex;gap:14px;align-items:center">${ffSlot(S.pid,96)}<div style="min-width:0;flex:1"><div class="eyebrow">Tu rango</div><h3 style="font-size:26px;margin-top:2px">${esc(r.name)}</h3><span class="muted" style="font-size:14px">${pa(r.acc)} de acierto · ${r.n.toLocaleString("es-ES")} sitios vistos</span></div></div>
-    <div class="rbar"><i style="width:${pct}%"></i></div><p class="muted" style="margin:6px 0 0;font-size:13px">${foot} Cuenta la última respuesta de cada sitio: hacer más preguntas no sube el rango, acertar más sí.</p>
+  return `<div class="card"><div style="display:flex;gap:14px;align-items:center">${ffSlot(S.pid,96)}<div style="min-width:0;flex:1"><div class="eyebrow">Tu rango</div><h3 style="font-size:26px;margin-top:2px">${esc(r.name)}</h3><span class="muted" style="font-size:14px">${pa(r.acc)} de acierto en 30 días · ${r.n.toLocaleString("es-ES")} respuestas</span></div></div>
+    <div class="rbar"><i style="width:${pct}%"></i></div><p class="muted" style="margin:6px 0 0;font-size:13px">${foot} Es el acierto del reto y el entreno de los últimos 30 días: hacer más preguntas no sube el rango, acertar más sí.</p>
     <details class="salidas" style="margin-top:10px"><summary><span><b>Chapas por parque</b></span><span class="muted">${r.med.map(m=>m.t>=0?`<i class="medal" style="--mc:${MEDC[m.t]}"></i>`:`<i class="medal off"></i>`).join("")}</span></summary>
     <p class="muted" style="margin:6px 0 8px;font-size:13px">Acierto en los sitios de cada parque, habiendo visto al menos la mitad: bronce 70 %, plata 85 %, oro 95 %. Salen en el pecho de tu bombero.</p>
     ${r.med.map(m=>`<div style="margin-top:8px"><div class="spread" style="font-size:14px"><span><span class="ans" style="--pc:var(--p${m.k})"><i></i>${esc(m.name)}</span>${m.t>=0?` <i class="medal" style="--mc:${MEDC[m.t]}"></i> <span class="muted">${MEDN[m.t]}</span>`:""}</span><span class="muted">${m.a?pa(m.acc):"–"} · visto ${Math.round(100*m.cov)} %</span></div><div class="rbar" style="height:6px;margin-top:4px"><i style="width:${Math.min(100,m.acc)}%;background:${m.t>=0?MEDC[m.t]:"var(--muted)"}"></i></div>${m.cov<MEDCOV?`<div class="muted" style="font-size:12px;margin-top:2px">Te faltan ${Math.ceil(m.tot*MEDCOV)-m.a} por ver para optar a chapa</div>`:m.t<2?`<div class="muted" style="font-size:12px;margin-top:2px">${MEDN[m.t+1]} al ${MEDT[m.t+1]} %</div>`:""}</div>`).join("")}
@@ -1476,8 +1479,8 @@ function frontierGroups(){
 async function loadAllLo(force){
   if(S.pid && SRS.loaded){ BAR.lo[S.pid]=SRS.lo; BAR.h[S.pid]=SRS.h; }
   if(!S.db || (!force && Date.now()-BAR.loAt<120000)) return; BAR.loAt=Date.now();
-  await Promise.all(playerList().filter(p=>p.id!==S.pid).map(async p=>{ try{ const d=await S.db.doc(`players/${p.id}/srs/main`).get(); const v=d.exists?(d.data()||{}):{}; BAR.lo[p.id]=v.lo||{}; BAR.h[p.id]=hFill(v.h||{},v.lo||{}); }catch{ BAR.lo[p.id]={}; BAR.h[p.id]={}; } }));
-  if(S.view==="rank" && !S.quiz) render();
+  await Promise.all(playerList().filter(p=>p.id!==S.pid).map(async p=>{ try{ const d=await S.db.doc(`players/${p.id}/srs/main`).get(); const v=d.exists?(d.data()||{}):{}; BAR.lo[p.id]=v.lo||{}; BAR.h[p.id]=hFill(v.h||{},v.lo||{}); }catch{ BAR.loAt=0; } }));
+  if(!S.quiz && (S.view==="rank"||S.view==="hoy") && !document.querySelector("input:focus")) render();
 }
 function levelOf(items, lo){
   const ex=flaggedSet(Date.now()+1); let n=0,a=0,sum=0;
