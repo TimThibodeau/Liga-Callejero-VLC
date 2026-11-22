@@ -64,10 +64,10 @@ h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.0
 
 /* Tabs */
 nav.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
-nav.tabs .wrap{display:grid;grid-template-columns:repeat(6,1fr)}
+nav.tabs .wrap{display:grid;grid-template-columns:repeat(5,1fr)}
 nav.tabs button{background:none;border:0;padding:12px 4px 10px;font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);border-bottom:3px solid transparent;min-width:0}
-@media (max-width:520px){nav.tabs button{font-size:12.5px;letter-spacing:0;padding-inline:1px}}
-@media (max-width:370px){nav.tabs button{font-size:10.5px}}
+@media (max-width:520px){nav.tabs button{font-size:14px;letter-spacing:.01em;padding-inline:1px}}
+@media (max-width:370px){nav.tabs button{font-size:11.5px}}
 nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--brand)}
 nav.tabs button{position:relative}
 nav.tabs .dot{position:absolute;top:7px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--brand)}
@@ -98,6 +98,11 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .aviso-kind{color:var(--bad)!important}
 .ff{position:relative;flex:none;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .ff .fig{width:100%;height:100%;transform-origin:50% 100%}
+.ffx{position:absolute;pointer-events:none;font-size:22px;line-height:1;animation:ffx .7s ease-out both;z-index:2}
+@keyframes ffx{0%{opacity:0;transform:translateY(6px) scale(.6)}25%{opacity:1;transform:translateY(0) scale(1.1)}75%{opacity:1;transform:translateY(-4px) scale(1)}100%{opacity:0;transform:translateY(-12px) scale(.9)}}
+.ff.i1 .fig{animation:ffnod 1.1s ease-in-out}@keyframes ffnod{0%,100%{transform:rotate(0)}25%{transform:rotate(-3deg) translateX(-2px)}50%{transform:rotate(3deg) translateX(2px)}75%{transform:rotate(-2deg)}}
+.ff.i2 .fig{animation:ffspray 1.4s ease-in-out}@keyframes ffspray{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-3px) rotate(-3deg)}40%,80%{transform:translateX(2px) rotate(2deg)}}
+@media (prefers-reduced-motion:reduce){.ff .fig,.ffx{animation:none!important}}
 .ff:hover .fig{animation:ffhop .5s ease-out}
 .ff.a1 .fig{animation:ffhop .6s ease-out}.ff.a2 .fig{animation:ffwave .8s ease-in-out}.ff.a3 .fig{animation:ffspin .7s ease-in-out}.ff.a4 .fig{animation:ffsquash .6s ease-out}
 @keyframes ffhop{0%,100%{transform:translateY(0)}35%{transform:translateY(-16px) rotate(-4deg)}60%{transform:translateY(0) scaleY(.92)}80%{transform:translateY(-4px)}}
@@ -296,7 +301,6 @@ const firebaseConfig = {
   <button role="tab" id="t-hoy" aria-selected="true" data-v="hoy">Reto</button>
   <button role="tab" id="t-duel" aria-selected="false" data-v="duelos">Duelos</button>
   <button role="tab" id="t-libre" aria-selected="false" data-v="libre">Entreno</button>
-  <button role="tab" id="t-rutas" aria-selected="false" data-v="rutas">Rutas</button>
   <button role="tab" id="t-rank" aria-selected="false" data-v="rank">Ranking</button>
   <button role="tab" id="t-fallos" aria-selected="false" data-v="fallos">Repaso</button>
 </div></nav>
@@ -311,11 +315,18 @@ const firebaseConfig = {
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
 const DATA_V = "20";
-const APP_V = "33";
+const APP_V = "34";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
-document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") checkVersion(); });
+// Al volver a la pestaña (móvil, sin cerrarla): si ha pasado rato o ha cambiado el día, recarga para tenerlo todo al día.
+let HID_AT=0, OPEN_DAY=null;
+function freshen(){ const away=HID_AT?Date.now()-HID_AT:0; HID_AT=0; checkVersion();
+  const dayChanged = OPEN_DAY && typeof today==="function" && today()!==OPEN_DAY;
+  if((away>90000 || dayChanged) && !S.quiz && !S.route && !document.querySelector("input:focus")) location.reload(); }
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") freshen(); else HID_AT=Date.now(); });
+window.addEventListener("pageshow",e=>{ if(e.persisted && !S.quiz) location.reload(); });
+setInterval(()=>{ if(document.visibilityState==="visible") checkVersion(); }, 300000);
 setInterval(checkVersion, 10*60*1000);
 let DATA_BASE = 1e9;
 const NEW_ITEMS_FROM = "2026-10-30";
@@ -508,34 +519,37 @@ function streak(pid){
   return n;
 }
 // ----- RANGOS -----
-const RANK_LOOK=["gorra de academia","casco amarillo y manguera","casco rojo y hacha","casco naranja, hacha y ERA","casco plata, hacha y ERA","casco blanco, ERA, emisora y galones","casco blanco con franja dorada y tres estrellas"];
-// Rango: sitios dominados = acertados (los dos parques) las 3 últimas veces seguidas.
-const RANKS=[[0,"Aspirante"],[300,"Bombero"],[750,"Cabo"],[1400,"Sargento"],[2200,"Suboficial"],[3200,"Oficial"],[4400,"Jefe de parque"]];
-// Hoja de servicio: medallas por bloque (% del bloque dominado). Bronce 50 %, plata 75 %, oro 90 %.
-const MEDB=[["C","Calles"],["E","Equipamientos"],["K","CLOCK"],["M","Museos y monumentos"],["H","Hospitales"]];
-const MEDT=[50,75,90], MEDC=["#B87333","#C8D0D8","#E8B23A"], MEDN=["Bronce","Plata","Oro"];
-const isDom = v => v==="111";
-function hOf(pid){ return pid===S.pid && SRS.loaded ? SRS.h : BAR.h[pid]; }
-function rankScore(h){ let n=0; if(h) for(const k in h){ const it=ITEMS[k]; if(isDom(h[k]) && it && it[0]!=="S" && it[0]!=="J") n++; } return n; }
-function medalsOf(h){ return MEDB.map(([b,name])=>{ const ids=BYBLOCK[b]||[]; let d=0; if(h) for(const i of ids) if(isDom(h[i])) d++; const p=ids.length?100*d/ids.length:0; let t=-1; MEDT.forEach((x,k)=>{ if(p>=x) t=k; }); return {b,name,d,tot:ids.length,p,t}; }); }
-function rankOf(pid){ const h=hOf(pid); if(!h) return null; const n=rankScore(h); let i=0; while(i+1<RANKS.length && n>=RANKS[i+1][0]) i++;
-  const med=medalsOf(h); return {i,n,name:RANKS[i][1],next:RANKS[i+1]||null,base:RANKS[i][0],med,mt:med.filter(m=>m.t>=0).length}; }
-function rankTag(pid){ const r=rankOf(pid); return r?`<span class="rank">${"★".repeat(r.i)||"·"} ${esc(r.name)}</span>`:""; }
-// ----- PERSONAJE POR RANGO -----
+const RANK_LOOK=["gorra de academia","gorra y manguera","casco amarillo y manguera","casco rojo y hacha","casco naranja, hacha y ERA","casco blanco, ERA, emisora y galones","casco blanco con franja dorada y tres estrellas"];
+// Rango por CALIDAD: % de acierto en la última respuesta de cada sitio que has visto (como las insignias de barrio).
+// Hacer más preguntas no sube el rango; hace falta haber visto un mínimo de sitios para que cuente.
+const RANKS=[[0,"Aspirante"],[60,"Opositor"],[70,"Bombero"],[75,"Cabo"],[80,"Sargento"],[85,"Oficial"],[90,"Jefe de parque"]];
+const RANK_MIN=500;
+// Chapas por parque: acierto en los sitios de cada parque (habiendo visto al menos la mitad). Bronce 70 %, plata 85 %, oro 95 %.
+const MEDT=[70,85,95], MEDC=["#B87333","#4F8FD6","#E8B23A"], MEDN=["Bronce","Plata","Oro"], MEDCOV=0.5;
+let PKIDS=null;
+function parkIds(){ if(!PKIDS){ PKIDS=[[],[],[],[],[]]; ITEMS.forEach((it,i)=>{ if(it[0]==="S"||it[0]==="J"||Array.isArray(it[3])||!(it[3]>=0)) return; PKIDS[it[3]]?.push(i); }); } return PKIDS; }
+function medalsOf(lo){ return parkIds().map((ids,k)=>{ let a=0,sum=0; if(lo) for(const i of ids){ const v=lo[i]; if(v!=null){ a++; sum+=v; } }
+  const cov=ids.length?a/ids.length:0, acc=a?100*sum/a:0; let t=-1; if(cov>=MEDCOV) MEDT.forEach((x,j)=>{ if(acc>=x) t=j; });
+  return {k,name:PSHORT[k],a,tot:ids.length,cov,acc,t}; }).filter(m=>m.tot>=10); }
+function rankScore(lo){ let n=0,sum=0; if(lo) for(const k in lo){ const it=ITEMS[k]; if(!it||it[0]==="S"||it[0]==="J") continue; n++; sum+=lo[k]; } return {n, acc:n?100*sum/n:0}; }
+function rankOf(pid){ const lo = pid===S.pid && SRS.loaded ? SRS.lo : BAR.lo[pid]; if(!lo) return null; const {n,acc}=rankScore(lo);
+  let i=0; if(n>=RANK_MIN) while(i+1<RANKS.length && acc>=RANKS[i+1][0]) i++;
+  const med=medalsOf(lo); return {i,n,acc,name:RANKS[i][1],next:RANKS[i+1]||null,base:RANKS[i][0],med,mt:med.filter(m=>m.t>=0).length,short:n<RANK_MIN}; }
+function rankTag(pid){ const r=rankOf(pid); return r?`<span class="rank">${esc(r.name)}</span>`:""; }
 function firefighterSVG(rank, uid, med){
   // rank: 0 Aspirante,1 Bombero,2 Cabo,3 Sargento,4 Suboficial,5 Oficial,6 Jefe
-  const H=[["#22324A","#16233A"],["#F4C21B","#C99A08"],["#D7261E","#9E1610"],["#F07B12","#B8560A"],["#B9C2CC","#808B97"],["#F5F5F2","#C9CCCF"],["#F5F5F2","#C9CCCF"]][rank];
+  const H=[["#22324A","#16233A"],["#22324A","#16233A"],["#F4C21B","#C99A08"],["#D7261E","#9E1610"],["#F07B12","#B8560A"],["#F5F5F2","#C9CCCF"],["#F5F5F2","#C9CCCF"]][rank];
   const id="f"+uid;
-  const cap = rank===0;
+  const cap = rank<=1;
   const helmet = cap
     ? `<path d="M40 40 q20 -18 40 0 v6 h-40z" fill="url(#${id}h)"/><path d="M38 45 h48 q-2 5 -10 5 h-38z" fill="#16233A"/>`
-    : `<path d="M36 44 q0 -26 24 -27 q24 1 24 27z" fill="url(#${id}h)"/><path d="M58 18 h4 v26 h-4z" fill="${H[1]}" opacity=".55"/><ellipse cx="60" cy="45" rx="30" ry="5" fill="url(#${id}h)"/><ellipse cx="60" cy="45" rx="30" ry="5" fill="none" stroke="${H[1]}" stroke-width="1"/><path d="M53 26 h14 l-2 11 h-10z" fill="#E8B23A" stroke="#8A5A10" stroke-width=".8"/>${rank===6?`<path d="M37 41 q23 6 46 0" stroke="#E8B23A" stroke-width="2.5" fill="none"/>`:""}${rank>=4?`<rect x="42" y="38" width="36" height="3" rx="1.5" fill="#15212C" opacity=".75"/>`:""}`;
-  const era = rank>=3 ? `<rect x="78" y="62" width="13" height="40" rx="6" fill="url(#${id}t)"/><rect x="80" y="58" width="9" height="6" rx="2" fill="#6B7783"/><path d="M84 64 q10 20 -8 34" stroke="#15212C" stroke-width="2.4" fill="none"/>` : "";
-  const axe = (rank>=2 && rank<=4) ? `<g transform="rotate(-18 28 118)"><rect x="25" y="84" width="5" height="58" rx="2" fill="#7A4A22"/><path d="M14 86 q8 -6 18 -2 v12 q-10 4 -18 -2z" fill="#C9D1D8" stroke="#6B7783" stroke-width="1"/><path d="M30 84 l9 6 l-9 4z" fill="#C42A1C"/></g>` : "";
+    : `<path d="M36 44 q0 -26 24 -27 q24 1 24 27z" fill="url(#${id}h)"/><path d="M58 18 h4 v26 h-4z" fill="${H[1]}" opacity=".55"/><ellipse cx="60" cy="45" rx="30" ry="5" fill="url(#${id}h)"/><ellipse cx="60" cy="45" rx="30" ry="5" fill="none" stroke="${H[1]}" stroke-width="1"/><path d="M53 26 h14 l-2 11 h-10z" fill="#E8B23A" stroke="#8A5A10" stroke-width=".8"/>${rank===6?`<path d="M37 41 q23 6 46 0" stroke="#E8B23A" stroke-width="2.5" fill="none"/>`:""}${rank>=5?`<rect x="42" y="38" width="36" height="3" rx="1.5" fill="#15212C" opacity=".75"/>`:""}`;
+  const era = rank>=4 ? `<rect x="78" y="62" width="13" height="40" rx="6" fill="url(#${id}t)"/><rect x="80" y="58" width="9" height="6" rx="2" fill="#6B7783"/><path d="M84 64 q10 20 -8 34" stroke="#15212C" stroke-width="2.4" fill="none"/>` : "";
+  const axe = (rank===3 || rank===4) ? `<g transform="rotate(-18 28 118)"><rect x="25" y="84" width="5" height="58" rx="2" fill="#7A4A22"/><path d="M14 86 q8 -6 18 -2 v12 q-10 4 -18 -2z" fill="#C9D1D8" stroke="#6B7783" stroke-width="1"/><path d="M30 84 l9 6 l-9 4z" fill="#C42A1C"/></g>` : "";
   const radio = rank>=5 ? `<rect x="80" y="74" width="9" height="16" rx="2" fill="#15212C"/><rect x="83" y="66" width="2" height="9" fill="#15212C"/><rect x="82" y="78" width="5" height="4" fill="#4CC08A"/>` : "";
-  const hose = rank===1 ? `<path d="M30 140 q-14 -10 -6 -30 q6 -14 12 -22" stroke="#C42A1C" stroke-width="5" fill="none" stroke-linecap="round"/><rect x="33" y="82" width="7" height="10" rx="2" fill="#B9C2CC"/>` : "";
+  const hose = (rank===1 || rank===2) ? `<path d="M30 140 q-14 -10 -6 -30 q6 -14 12 -22" stroke="#C42A1C" stroke-width="5" fill="none" stroke-linecap="round"/><rect x="33" y="82" width="7" height="10" rx="2" fill="#B9C2CC"/>` : "";
   const stars = rank>=5 ? `<g fill="#E8B23A">${[0,1,2].slice(0,rank===6?3:2).map(k=>`<path transform="translate(${50+k*8} 76)" d="M0 -3 l1 2 2 .3 -1.5 1.4 .4 2.1 -1.9 -1 -1.9 1 .4 -2.1 -1.5 -1.4 2 -.3z"/>`).join("")}</g>` : "";
-  const ms=(med||[]).filter(m=>m.t>=0); const medals = ms.length ? `<g>${ms.map((m,k)=>{ const x=43+k*4.6; return `<rect x="${x-1.6}" y="80" width="3.2" height="4" fill="${["#C42A1C","#1F6FD1","#2E9E5B","#8E44AD","#E7E9EC"][MEDB.findIndex(b=>b[0]===m.b)]}"/><circle cx="${x}" cy="86.5" r="2.3" fill="${MEDC[m.t]}" stroke="#15212C" stroke-width=".5"/>`; }).join("")}</g>` : "";
+  const ms=(med||[]).filter(m=>m.t>=0); const medals = ms.length ? `<g>${ms.map((m,k)=>{ const x=43+k*4.6; return `<rect x="${x-1.6}" y="80" width="3.2" height="4" fill="${parkColor(m.k)}"/><circle cx="${x}" cy="86.5" r="2.3" fill="${MEDC[m.t]}" stroke="#15212C" stroke-width=".5"/>`; }).join("")}</g>` : "";
   const stripe = cap ? "" : `<rect x="40" y="96" width="40" height="5" fill="#E7E9EC"/><rect x="40" y="97.5" width="40" height="2" fill="#F4C21B"/>`;
   return `<svg viewBox="0 0 120 170" width="100%" height="100%" role="img" aria-label="Bombero">
   <defs><linearGradient id="${id}h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${H[0]}"/><stop offset="1" stop-color="${H[1]}"/></linearGradient>
@@ -560,7 +574,7 @@ function firefighterSVG(rank, uid, med){
   <circle cx="60" cy="48" r="15" fill="url(#${id}s)"/>
   <circle cx="54.5" cy="48" r="1.8" fill="#15212C"/><circle cx="65.5" cy="48" r="1.8" fill="#15212C"/>
   <path d="M55 55 q5 4 10 0" stroke="#7A3B2A" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-  ${rank>=3?`<path d="M45 52 q-4 4 -2 8" stroke="#15212C" stroke-width="1.4" fill="none"/>`:""}
+  ${rank>=4?`<path d="M45 52 q-4 4 -2 8" stroke="#15212C" stroke-width="1.4" fill="none"/>`:""}
   <g transform="translate(0,-4)">${helmet}</g>
   ${axe}${hose}
   </svg>`;
@@ -591,12 +605,26 @@ const GAGS=[
 function ffGag(pid){
   const r=rankOf(pid), C=BYBLOCK.C||[], rnd=Math.random();
   if(rnd<0.35 && C.length){ for(let k=0;k<20;k++){ const id=C[Math.floor(Math.random()*C.length)], it=ITEMS[id]; if(it && !Array.isArray(it[3]) && it[4]>=0) return `Truco: <b>${esc(it[1])}</b> → ${PSHORT[it[3]]}–${PSHORT[it[4]]}. De nada.`; } }
-  if(rnd<0.45 && r && r.next) return `Me faltan <b>${(r.next[0]-r.n).toLocaleString("es-ES")}</b> sitios para ser ${esc(r.next[1])}. ¡A por ellos!`;
-  if(rnd<0.48 && r && !r.next){ const m=r.med.filter(x=>x.t<2).sort((a,b)=>b.p-a.p)[0]; if(m) return `Rango máximo, sí. Pero en <b>${esc(m.name)}</b> voy al ${Math.round(m.p)} %. Sin medalla de oro no me jubilo.`; }
+  if(rnd<0.45 && r && r.short) return `Llevo <b>${r.n.toLocaleString("es-ES")}</b> sitios vistos. A los ${RANK_MIN} empiezo a tener rango.`;
+  if(rnd<0.45 && r && r.next) return `Voy al <b>${String(r.acc.toFixed(1)).replace(".",",")} %</b>. Al ${r.next[0]} % me hacen ${esc(r.next[1].toLowerCase())}.`;
+  if(rnd<0.48 && r && !r.next){ const m=r.med.filter(x=>x.t<2).sort((a,b)=>b.acc-a.acc)[0]; if(m) return `Jefe de parque, sí. Pero en <b>${esc(m.name)}</b> voy al ${Math.round(m.acc)} %. Sin chapa de oro no me jubilo.`; }
   if(rnd<0.52){ const st=streak(pid); if(st>1) return `Llevamos <b>${st}</b> días seguidos de reto. Aquí no libra nadie.`; }
   if(pid!==S.pid) return `Soy ${esc(aliasOf(pid))}, ${esc(r?r.name.toLowerCase():"aspirante")}. ${GAGS[Math.floor(Math.random()*GAGS.length)]}`;
   return GAGS[Math.floor(Math.random()*GAGS.length)];
 }
+
+// Animaciones sueltas de vez en cuando: saluda, apaga un fuego, se echa un café…
+const IDLE_FX=[["👋","👋"],["🔥","💦","💦","💨"],["☕","😌"],["💤","💤"],["🧯","🔥","💨"],["🚒","🚨"],["🗺️","🤔","💡"],["🍊","😋"],["🥘","🔥","😋"]];
+function ffIdle(){
+  if(document.visibilityState!=="visible") return;
+  const els=[...document.querySelectorAll("[data-ff]")].filter(el=>{ const r=el.getBoundingClientRect(); return r.bottom>0 && r.top<innerHeight && !el.querySelector(".bubble,.ffx"); });
+  if(!els.length) return; const el=els[Math.floor(Math.random()*els.length)];
+  const seq=IDLE_FX[Math.floor(Math.random()*IDLE_FX.length)], cls=seq[0]==="🔥"||seq[0]==="🧯"?"i2":"i1";
+  el.classList.remove("a1","a2","a3","a4","i1","i2"); void el.offsetWidth; el.classList.add(seq[0]==="👋"?"a2":cls);
+  const left = seq[0]==="🔥"||seq[0]==="🧯" ? "-6%" : "62%";
+  seq.forEach((e,k)=>setTimeout(()=>{ el.querySelectorAll(".ffx").forEach(x=>x.remove()); if(!el.isConnected) return; const x=document.createElement("span"); x.className="ffx"; x.textContent=e; x.style.left=left; x.style.top=(seq[0]==="🔥"?"58%":"8%"); el.appendChild(x); setTimeout(()=>x.remove(),700); },k*650));
+}
+(function idleLoop(){ setTimeout(()=>{ try{ ffIdle(); }catch{} idleLoop(); }, 9000+Math.random()*9000); })();
 function bindFF(){
   document.querySelectorAll("[data-ff]").forEach(el=>{
     const go=()=>{ const a="a"+(1+Math.floor(Math.random()*4)); el.classList.remove("a1","a2","a3","a4"); void el.offsetWidth; el.classList.add(a);
@@ -609,12 +637,15 @@ function bindFF(){
 }
 function rankCardHTML(){
   const r=rankOf(S.pid); if(!r) return "";
-  const pct = r.next ? Math.min(100,Math.round(100*(r.n-r.base)/(r.next[0]-r.base))) : 100;
-  return `<div class="card"><div style="display:flex;gap:14px;align-items:center">${ffSlot(S.pid,96)}<div style="min-width:0;flex:1"><div class="eyebrow">Tu rango</div><h3 style="font-size:26px;margin-top:2px">${"★".repeat(r.i)} ${esc(r.name)}</h3><span class="muted" style="font-size:14px">${r.n.toLocaleString("es-ES")} sitios dominados · ${r.mt} medalla${r.mt===1?"":"s"}</span>${r.next?`<p class="muted" style="margin:4px 0 0;font-size:13px">Siguiente: <b>${esc(r.next[1])}</b> · ${RANK_LOOK[r.i+1]}</p>`:""}</div></div>
-    <div class="rbar"><i style="width:${pct}%"></i></div><p class="muted" style="margin:6px 0 0;font-size:13px">${r.next?`Te faltan <b>${(r.next[0]-r.n).toLocaleString("es-ES")}</b> para <b>${esc(r.next[1])}</b>.`:"Rango máximo. Ahora, a por el oro en todo."} Un sitio está dominado cuando lo aciertas completo <b>tres veces seguidas</b>; si lo fallas, deja de contar hasta que vuelvas a encadenar tres.</p>
-    <details class="salidas" style="margin-top:10px"${r.next?"":" open"}><summary><span><b>Hoja de servicio</b></span><span class="muted">${r.med.map(m=>m.t>=0?`<i class="medal" style="--mc:${MEDC[m.t]}"></i>`:`<i class="medal off"></i>`).join("")}</span></summary>
-    <p class="muted" style="margin:6px 0 8px;font-size:13px">Medalla por bloque según el % que tienes dominado: bronce 50 %, plata 75 %, oro 90 %. Salen en el pecho de tu bombero.</p>
-    ${r.med.map(m=>{ const nx=MEDT[m.t+1]; const need=nx?Math.max(0,Math.ceil(m.tot*nx/100)-m.d):0; return `<div style="margin-top:8px"><div class="spread" style="font-size:14px"><span>${m.t>=0?`<i class="medal" style="--mc:${MEDC[m.t]}"></i> `:""}<b>${esc(m.name)}</b>${m.t>=0?` <span class="muted">· ${MEDN[m.t]}</span>`:""}</span><span class="muted">${m.d.toLocaleString("es-ES")} / ${m.tot.toLocaleString("es-ES")} · ${Math.floor(m.p)} %</span></div><div class="rbar" style="height:6px;margin-top:4px"><i style="width:${Math.min(100,m.p)}%;background:${m.t>=0?MEDC[m.t]:"var(--muted)"}"></i></div>${nx?`<div class="muted" style="font-size:12px;margin-top:2px">${need.toLocaleString("es-ES")} más para ${MEDN[m.t+1].toLowerCase()}</div>`:""}</div>`; }).join("")}
+  const pa=v=>String(v.toFixed(1)).replace(".",",")+" %";
+  const pct = r.short ? Math.round(100*r.n/RANK_MIN) : r.next ? Math.max(0,Math.min(100,Math.round(100*(r.acc-r.base)/(r.next[0]-r.base)))) : 100;
+  const foot = r.short ? `Te faltan <b>${(RANK_MIN-r.n).toLocaleString("es-ES")}</b> sitios por ver para tener rango. Ahora mismo vas al ${pa(r.acc)}.`
+    : r.next ? `Al <b>${r.next[0]} %</b> eres <b>${esc(r.next[1])}</b> (${RANK_LOOK[r.i+1]}).` : "Lo máximo. Ahora, a por el oro en todos los parques.";
+  return `<div class="card"><div style="display:flex;gap:14px;align-items:center">${ffSlot(S.pid,96)}<div style="min-width:0;flex:1"><div class="eyebrow">Tu rango</div><h3 style="font-size:26px;margin-top:2px">${esc(r.name)}</h3><span class="muted" style="font-size:14px">${pa(r.acc)} de acierto · ${r.n.toLocaleString("es-ES")} sitios vistos</span></div></div>
+    <div class="rbar"><i style="width:${pct}%"></i></div><p class="muted" style="margin:6px 0 0;font-size:13px">${foot} Cuenta la última respuesta de cada sitio: hacer más preguntas no sube el rango, acertar más sí.</p>
+    <details class="salidas" style="margin-top:10px"><summary><span><b>Chapas por parque</b></span><span class="muted">${r.med.map(m=>m.t>=0?`<i class="medal" style="--mc:${MEDC[m.t]}"></i>`:`<i class="medal off"></i>`).join("")}</span></summary>
+    <p class="muted" style="margin:6px 0 8px;font-size:13px">Acierto en los sitios de cada parque, habiendo visto al menos la mitad: bronce 70 %, plata 85 %, oro 95 %. Salen en el pecho de tu bombero.</p>
+    ${r.med.map(m=>`<div style="margin-top:8px"><div class="spread" style="font-size:14px"><span><span class="ans" style="--pc:var(--p${m.k})"><i></i>${esc(m.name)}</span>${m.t>=0?` <i class="medal" style="--mc:${MEDC[m.t]}"></i> <span class="muted">${MEDN[m.t]}</span>`:""}</span><span class="muted">${m.a?pa(m.acc):"–"} · visto ${Math.round(100*m.cov)} %</span></div><div class="rbar" style="height:6px;margin-top:4px"><i style="width:${Math.min(100,m.acc)}%;background:${m.t>=0?MEDC[m.t]:"var(--muted)"}"></i></div>${m.cov<MEDCOV?`<div class="muted" style="font-size:12px;margin-top:2px">Te faltan ${Math.ceil(m.tot*MEDCOV)-m.a} por ver para optar a chapa</div>`:m.t<2?`<div class="muted" style="font-size:12px;margin-top:2px">${MEDN[m.t+1]} al ${MEDT[m.t+1]} %</div>`:""}</div>`).join("")}
     </details></div>`;
 }
 // ----- COMBOS -----
@@ -678,7 +709,7 @@ document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("clic
 function quizHome(m){ return m==="daily"?"hoy":m==="duel"?"duelos":(m==="srs"||m==="fails")?"fallos":m==="aviso"?"rutas":"libre"; }
 function render(){
   document.querySelectorAll("nav.tabs button").forEach(b=>{
-    b.setAttribute("aria-selected", String(b.dataset.v===S.view));
+    b.setAttribute("aria-selected", String(b.dataset.v===S.view || (S.view==="rutas" && b.dataset.v==="fallos")));
     const pending = (b.dataset.v==="hoy" && S.pid && ITEMS.length && !myDays()[today()]?.dy?.done) || (b.dataset.v==="fallos" && SRS.loaded && ITEMS.length && srsDueCount()>0) || (b.dataset.v==="duelos" && S.pid && S.duels.some(D=>(D.a===S.pid||D.b===S.pid) && !duelWinner(D) && !D[duelSide(D)]?.done));
     b.innerHTML = esc(b.textContent.replace(/\s+$/,"")) + (pending?'<span class="dot" aria-label="pendiente"></span>':"");
   });
@@ -687,7 +718,7 @@ function render(){
   else chip.hidden = true;
   const main = $("#main");
   if(!ITEMS.length) return;
-  S.champ = lastChampion()?.id || null;
+  S.champ = lastChampion()?.id || null; if(!OPEN_DAY) OPEN_DAY=today();
   ensureSrs();
   let html = "";
   if(S.writeError) html += `<div class="notice bad" role="alert">${esc(S.writeError)}</div>`;
@@ -718,7 +749,7 @@ function hoyHTML(){
   let h = offlineNote();
   const rc = rankCardHTML();
   h += `<div class="card" style="display:flex;gap:8px;align-items:flex-end"><div style="flex:1;min-width:0"><div class="eyebrow">${esc(longDate(ds))}</div><div class="spread" style="margin-top:6px">
-    <div><h2 style="font-size:30px">Reto del día</h2><p class="muted" style="margin:4px 0 0">${dailyIds(ds).length} preguntas, las mismas para todos: ${mixText(dailyPlan(ds).mix)}. Solo vale el primer intento. En empate gana quien tarde menos.</p></div>`;
+    <div><h2 style="font-size:30px">Reto del día</h2><p class="muted" style="margin:4px 0 0">${(s=>s.charAt(0).toUpperCase()+s.slice(1))(mixText(dailyPlan(ds).mix))}.</p></div>`;
   if(done) h += `<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ ${mine.n||dailyIds(ds).length} · ${fmtT(mine.ms||0)}</span></div>`;
   h += `</div>`;
   if(!done) h += `<div class="row" style="margin-top:14px"><button class="btn" id="startDaily">${started?`Seguir (${mine.ans.length}/${dailyIds(ds).length})`:"Empezar reto"}</button></div>`;
@@ -796,9 +827,9 @@ function libreHTML(){
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Pistas</div><div class="chips"><button class="chip" id="addrT" aria-pressed="${f.addr}">Mostrar dirección o traducción</button></div><p class="muted" style="font-size:13px;margin:6px 0 0">Quítalas para el modo difícil: solo el nombre del sitio. Se ven al responder.</p></div>`;
   h += `<div><div class="eyebrow" style="margin-bottom:8px">Preguntas por tanda</div><div class="seg" role="group">${[10,20,50].map(n=>`<button data-n="${n}" aria-pressed="${f.n===n}">${n}</button>`).join("")}</div></div>`;
   h += `<div class="spread"><span class="muted">${pool.length.toLocaleString("es-ES")} lugares en juego</span><button class="btn" id="startFree" ${pool.length?"":"disabled"}>Empezar tanda</button></div></div>`;
-  h += clockMapHTML();
   const myBest = survBest(S.pid), top = survTop();
   h += `<div class="card spread"><div style="min-width:0;flex:1 1 260px"><h3 style="font-size:24px">Supervivencia</h3><p class="muted" style="margin:4px 0 0">Calles sin parar hasta el primer fallo. Medio acierto también elimina. Cada respuesta suma al entreno.</p><p style="margin:6px 0 0;font-size:14px">Tu récord: <b>${myBest}</b>${top?` · Récord de la liga: <b>${top.best}</b> (${esc(aliasOf(top.id))})`:""}</p></div><button class="btn" id="startSurv">Jugar</button></div>`;
+  h += clockMapHTML();
   if(fr?.n) h += `<div class="card grid2"><div class="stat"><span class="eyebrow">Hoy en entreno</span><span class="num">${fmt(fr.pts)} pts</span></div><div class="stat"><span class="eyebrow">Preguntas</span><span class="num">${fr.n}</span></div><div class="stat"><span class="eyebrow">Acierto</span><span class="num">${Math.round(100*fr.pts/fr.n)} %</span></div></div>`;
   h += colorsCardHTML();
   h += flagsListHTML();
@@ -827,9 +858,9 @@ function rankHTML(){
   return seg + (S.rankMode==="bar" ? zonasHTML() : ligaHTML() + dotacionHTML());
 }
 function dotacionHTML(){
-  const ps=playerList().map(p=>({p,r:rankOf(p.id)})).filter(x=>x.r).sort((a,b)=>b.r.n-a.r.n);
+  const ps=playerList().map(p=>({p,r:rankOf(p.id)})).filter(x=>x.r).sort((a,b)=>(b.r.i-a.r.i)||(b.r.acc-a.r.acc));
   if(!ps.length) return "";
-  return `<div class="card"><div class="spread"><h3 style="font-size:24px">La dotación</h3><span class="muted" style="font-size:13px">Dominados = 3 aciertos seguidos</span></div><div style="display:flex;gap:6px;justify-content:space-around;flex-wrap:wrap;margin-top:8px">${ps.map(x=>`<div style="flex:1 1 0;min-width:0;max-width:130px;text-align:center">${ffSlot(x.p.id,80,true)}<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(aliasOf(x.p.id))}</div><div class="rank" style="margin:0">${"★".repeat(x.r.i)} ${esc(x.r.name)}</div><div class="muted" style="font-size:12px">${x.r.n.toLocaleString("es-ES")}${x.r.mt?` · ${x.r.med.filter(m=>m.t>=0).map(m=>`<i class="medal" style="--mc:${MEDC[m.t]}" title="${esc(m.name)}: ${MEDN[m.t]}"></i>`).join("")}`:""}</div></div>`).join("")}</div></div>`;
+  return `<div class="card"><div class="spread"><h3 style="font-size:24px">La dotación</h3><span class="muted" style="font-size:13px">Rango por % de acierto</span></div><div style="display:flex;gap:6px;justify-content:space-around;flex-wrap:wrap;margin-top:8px">${ps.map(x=>`<div style="flex:1 1 0;min-width:0;max-width:130px;text-align:center">${ffSlot(x.p.id,80,true)}<div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(aliasOf(x.p.id))}</div><div class="rank" style="margin:0">${esc(x.r.name)}</div><div class="muted" style="font-size:12px">${String(x.r.acc.toFixed(1)).replace(".",",")} %${x.r.mt?` · ${x.r.med.filter(m=>m.t>=0).map(m=>`<i class="medal" style="--mc:${MEDC[m.t]}" title="${esc(m.name)}: ${MEDN[m.t]}"></i>`).join("")}`:""}</div></div>`).join("")}</div></div>`;
 }
 function ligaHTML(){
   if(S.db && Date.now()-BAR.loAt>120000) setTimeout(()=>loadAllLo(false),0);
@@ -992,6 +1023,7 @@ function recordStats(d, it, sel, sc){
   if(vp[1]>=0 && sel.p===vp[0] && sel.a!=null){ d.ca = d.ca || Array(25).fill(0); d.ca[vp[1]*5+sel.a]++; }
   d.bk = d.bk || {}; const b=(d.bk[it[0]]||[0,0]).slice(); b[0]++; b[1]+=sc; d.bk[it[0]]=b;
 }
+function routesBtnHTML(){ return `<div class="card spread"><div style="flex:1 1 220px;min-width:0"><h3 style="font-size:22px">Recorridos</h3><p class="muted" style="margin:2px 0 0;font-size:14px">Modo aviso, recorrido del día, práctica y salidas habituales.</p></div><button class="btn" id="goRutas">Abrir</button></div>`; }
 function fallosHTML(){
   let h = offlineNote() + searchHTML();
   const ready = SRS.loaded;
@@ -1013,6 +1045,7 @@ function fallosHTML(){
       <div><div class="eyebrow" style="margin-bottom:8px">Máximo de repasos al día</div><div class="seg" role="group">${[[50,"50"],[100,"100"],[150,"150"],[0,"Sin límite"]].map(([n,l])=>`<button data-srscap="${n}" aria-pressed="${srsCap()===n}">${l}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Si se te acumulan más, se reparten solos en los días siguientes, empezando por tus bestias negras. Así nunca ves una montaña de pendientes.</p></div>
       <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G","K"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
     const beasts = cards.map(k=>({id:+k,c:srsGet(k)})).filter(x=>x.c.l>=2).sort((a,b)=>b.c.l-a.c.l).slice(0,15);
+    h += routesBtnHTML();
     if(beasts.length) h += `<div class="card"><div class="spread"><span class="eyebrow">Tus bestias negras</span><span class="row" style="gap:6px"><button class="btn ghost small" id="bprev" aria-label="Anterior">‹</button><span class="muted num" id="bpos" style="font-size:15px">1 de ${beasts.length}</span><button class="btn ghost small" id="bnext" aria-label="Siguiente">›</button></span></div><div class="bcar" id="bcar">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="bcard" data-bi="${x.id}"><span class="kind">${esc(kindOf(it))}</span><b class="bn">${esc(it[1])}</b>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])?`<span class="muted bi">${esc(it[2])}</span>`:""}<div class="bp">${ansHTML(it)}</div><span class="pill lost">${x.c.l} fallos</span></div>`;}).join("")}</div>${window.L?`<div id="beastmap" class="beastmap" role="img" aria-label="Mapa de la bestia negra"></div>`:""}</div>`;
   }
   h += statsHTML();
@@ -1066,9 +1099,10 @@ function duelsHTML(){
   const mine=S.duels.filter(D=>D.a===S.pid||D.b===S.pid);
   // Solo lo que tienes que jugar y tu último duelo. Sin historial ni duelos de los demás.
   const todo=mine.filter(D=>!duelWinner(D) && !D[duelSide(D)]?.done);
-  const last=mine.find(D=>!todo.includes(D));
-  const shown=todo.concat(last?[last]:[]);
-  if(shown.length) h+=`<div class="dlist">${shown.map(duelRow).join("")}</div>`;
+  const rest=mine.filter(D=>!todo.includes(D)), since=dayStart(addDays(today(),-1));
+  let recent=rest.filter(D=>(D.c||0)>=since).slice(0,10); if(!recent.length && rest[0]) recent=[rest[0]];
+  if(todo.length) h+=`<div class="eyebrow" style="margin:14px 0 6px">Te toca jugar</div><div class="dlist">${todo.map(duelRow).join("")}</div>`;
+  if(recent.length) h+=`<div class="eyebrow" style="margin:14px 0 6px">${recent.length===1&&(recent[0].c||0)<since?"Tu último duelo":"Ayer y hoy"}</div><div class="dlist">${recent.map(duelRow).join("")}</div>`;
   else if(!S.duelForm) h+=`<p class="muted" style="margin:10px 0 0;font-size:14px">Aún no tienes duelos. Reta a alguien.</p>`;
   return h+`</div>`;
 }
@@ -1322,6 +1356,8 @@ function drawRouteMap(){
   const pts=[st.ll];
   L.circleMarker(st.ll,{radius:9,color:"#fff",weight:3,fillColor:"#15212C",fillOpacity:1}).addTo(RMAP).bindTooltip(st.n,{permanent:true,direction:"top",className:"rtip"});
   loadGeo().then(()=>{ if(!RMAP) return; const lines=streetLines(it[9]); const dest=itemLL(it);
+    // Como en el examen: el destino no se ve hasta comprobar.
+    if(!R.checked){ RMAP.fitBounds(L.latLngBounds(STATIONS.slice(0,4).map(s=>s.ll)).pad(0.2),{animate:false}); return; }
     if(lines) lines.forEach(l=>{ L.polyline(l,{color:"#C42A1C",weight:7,opacity:.9}).addTo(RMAP); pts.push(...l); });
     if(dest){ L.circleMarker(dest,{radius:9,color:"#fff",weight:3,fillColor:"#C42A1C",fillOpacity:1}).addTo(RMAP); pts.push(dest); }
     if(R.checked && R.res){ L.polyline(R.res.line,{color:"#2B63C6",weight:5,opacity:.85}).addTo(RMAP); pts.push(...R.res.line); }
@@ -1330,6 +1366,7 @@ function drawRouteMap(){
 }
 function rutasHTML(){
   let h=offlineNote();
+  h+=`<button class="linkbtn" id="backRep" style="align-self:flex-start;font-size:15px">‹ Volver a Repaso</button>`;
   const R=S.route;
   if(!window.L) return h+`<div class="card"><h2 style="font-size:30px">Recorridos</h2><p class="muted">Los recorridos necesitan el mapa y el cálculo de rutas, que solo funcionan en la web de GitHub.</p></div>`;
   if(R && R.i<R.list.length) return h+routeQuestionHTML();
@@ -1337,7 +1374,6 @@ function rutasHTML(){
   const ds=today(), mine=myDays()[ds]?.rd, done=!!mine?.done;
   h+=`<div class="card" style="border:2px solid var(--brand)"><div class="spread"><div style="flex:1 1 260px;min-width:0"><div class="eyebrow" style="color:var(--brand)">Como en el supuesto</div><h2 style="font-size:30px">Modo aviso</h2><p class="muted" style="margin:4px 0 0">Entran 10 avisos: «Humo en la sala principal · Teatro Carolina». Tú decides qué parque sale y quién apoya y lo sitúas en el mapa; luego, si quieres, ves el recorrido más rápido y sus alternativas. Mezcla equipamientos clave, CLOCK, museos, hospitales y alguna calle. Suma a la liga como el entreno.</p></div><button class="btn" id="startAviso">Empezar guardia</button></div></div>`;
   h+=`<div class="card"><div class="eyebrow">${esc(longDate(ds))}</div><div class="spread" style="margin-top:6px"><div style="flex:1 1 260px;min-width:0"><h2 style="font-size:30px">Recorrido del día</h2><p class="muted" style="margin:4px 0 0">La misma calle para todos: el recorrido desde el parque que actúa y desde el que coopera. Escribe las calles por orden. Cada calle de la ruta que aciertes suma; cada calle que sobre resta medio. Nota sobre 10.</p></div>${done?`<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ 10</span></div>`:`<button class="btn" id="rDaily">${mine?.ans?.length?"Seguir":"Empezar"}</button>`}</div></div>`;
-  h+=routeBoardHTML(ds, done);
   h+=`<div class="card"><h3 style="font-size:24px">Practicar recorridos</h3><p class="muted" style="margin:4px 0 12px;font-size:14px">Una calle al azar y el recorrido desde su parque. No cuenta para la liga.</p><div class="seg" role="group">${[["p","Parque que actúa"],["a","Parque que coopera"],["b","Los dos"]].map(([k,l])=>`<button data-rorig="${k}" aria-pressed="${(S.rOrig||"p")===k}">${l}</button>`).join("")}</div><div style="margin-top:12px"><button class="btn" id="rPractice">Nuevo recorrido</button></div></div>`;
   h+=`<div class="card"><div class="eyebrow" style="margin-bottom:4px">Salidas habituales (apuntes de la academia)</div><p class="muted" style="font-size:13px;margin:0 0 8px">Cada recorrido empieza en la calle por la que sale el parque. Toca un parque para ver sus salidas.</p>${STATIONS.map((s,i)=>`<details class="salidas"><summary><span class="ans" style="--pc:var(--p${i})"><i></i>${esc(s.n)}</span><span class="muted">${esc(s.a)}</span></summary><ol>${s.r.map(x=>`<li>${esc(x)}</li>`).join("")}</ol></details>`).join("")}<p class="muted" style="font-size:12px;margin:10px 0 0">La ruta que se corrige se calcula con OpenStreetMap (camino más rápido en coche). Alguna vez puede no coincidir con Google Maps ni con estas salidas.</p></div>`;
   return h;
@@ -1356,7 +1392,7 @@ function routeQuestionHTML(){
   const R=S.route, q=R.list[R.i], it=ITEMS[q.id], st=STATIONS[q.o];
   let h=`<div class="qhead"><span class="eyebrow">${R.mode==="daily"?"Recorrido del día":"Práctica"} · ${R.i+1} de ${R.list.length}</span><span class="muted" style="font-size:13px">${q.role==="a"?"Parque que coopera":"Parque que actúa"}</span></div>
   <div class="plaque"><span class="kind">Desde ${esc(st.n)}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"?`<span class="info">${esc(it[2])}</span>`:""}</div>
-  <div id="rmap" class="rmapbox" role="img" aria-label="Mapa con el parque y la calle de destino"></div>`;
+  <div id="rmap" class="rmapbox" role="img" aria-label="Mapa con el parque de salida"></div>`;
   if(!R.checked){
     h+=`<div class="pick"><label class="eyebrow" for="rin">Tu recorrido</label><div id="rpicks" class="rpicks"></div><div class="rinwrap"><input class="input" id="rin" autocomplete="off" placeholder="Escribe una calle, en valenciano o castellano…"><div id="rsug" class="rsug"></div></div></div>
     ${R.err?`<div class="notice bad">${esc(R.err)}</div>`:""}
@@ -1389,7 +1425,7 @@ function bindRoutes(){
   const on=(sel,fn)=>{ const el=$(sel); if(el) el.addEventListener("click",fn); };
   on("#rDaily", startDailyRoute); on("#rPractice", startPracticeRoute);
   document.querySelectorAll("[data-rorig]").forEach(b=>b.addEventListener("click",()=>{ S.rOrig=b.dataset.rorig; render(); }));
-  on("#rcheck", checkRoute); on("#rnext", routeNext); on("#rskip", routeNext); on("#rquit", ()=>{ S.route=null; render(); });
+  on("#backRep", ()=>{ S.route=null; setView("fallos"); }); on("#rcheck", checkRoute); on("#rnext", routeNext); on("#rskip", routeNext); on("#rquit", ()=>{ S.route=null; render(); });
   const inp=$("#rin"); if(inp){ inp.addEventListener("input",()=>rsuggest(inp.value)); inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); const f=$("#rsug [data-rs]"); routeAdd(f?f.dataset.rs:inp.value); } }); }
   drawPicks(); drawRouteMap();
 }
@@ -1968,7 +2004,7 @@ function bindView(){
   on("#startDaily", ()=>{ if(S.db && !S.flagsLoaded) return; if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("daily", dailyIds(today())); });
   on("#startFree", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); });
   on("#startFails", ()=>{ const s=[...pendingFails()]; startQuiz("fails", sample(s, Math.min(20,s.length), Math.random)); });
-  on("#nextQ", next);
+  on("#nextQ", next); on("#goRutas", ()=>setView("rutas"));
   on("#zonasT", ()=>{ S.zonas=!zonasOn(); try{ localStorage.setItem("cbl.zonas",S.zonas?"1":"0"); }catch{} render(); });
   on("#startSrs", startSrs);
   on("#duelsAll", ()=>{ S.duelsAll=!S.duelsAll; render(); });
