@@ -89,6 +89,13 @@ section.view{display:flex;flex-direction:column;gap:16px}
 
 /* Question */
 .qhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.combo{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.04em;padding:2px 8px;border-radius:999px;background:var(--half-bg);color:var(--half);margin-left:8px}
+.combo.hot{background:var(--bad-bg);color:var(--bad);animation:cpop .35s ease-out}
+@keyframes cpop{0%{transform:scale(.6)}70%{transform:scale(1.18)}100%{transform:scale(1)}}
+.rank{display:inline-block;font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-left:2px}
+.rbar{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-top:8px}.rbar i{display:block;height:100%;background:var(--brand);border-radius:99px}
+.dalma{display:flex;gap:14px;align-items:center}.dalma svg{flex:none}
+.aviso-kind{color:var(--bad)!important}
 .progress{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
 .progress i{display:block;height:100%;background:var(--brand);transition:width .25s}
 .plaque{background:var(--plaque-bg);color:var(--plaque-ink);border:3px solid var(--plaque-rim);border-radius:14px;box-shadow:inset 0 0 0 4px var(--plaque-bg),inset 0 0 0 5.5px var(--plaque-rim);padding:22px 20px;text-align:center;min-height:132px;display:flex;flex-direction:column;justify-content:center;gap:6px}
@@ -289,7 +296,7 @@ const firebaseConfig = {
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
 const DATA_V = "20";
-const APP_V = "27";
+const APP_V = "29";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
@@ -472,7 +479,7 @@ function recordOutcome(d, id, sc){
 }
 
 // ---------- derived ----------
-function dayPts(doc){ return (doc?.dy?.pts||0) + (doc?.fr?.pts||0); }
+function dayPts(doc){ return (doc?.dy?.pts||0) + (doc?.fr?.pts||0) + (doc?.fr?.bonus||0); }
 function pendingFails(){
   const days = Object.keys(myDays()).sort();
   const set = new Set();
@@ -484,6 +491,106 @@ function streak(pid){
   if(!d[ds]?.dy?.done) ds = addDays(ds,-1);
   while(d[ds]?.dy?.done){ n++; ds = addDays(ds,-1); }
   return n;
+}
+// ----- RANGOS -----
+const RANK_LOOK=["gorra de academia","casco amarillo y manguera","casco rojo y hacha","casco naranja, hacha y ERA","casco plata, hacha y ERA","casco blanco, ERA, emisora y galones","casco blanco con franja dorada y tres estrellas"];
+const RANKS=[[0,"Aspirante"],[150,"Bombero"],[400,"Cabo"],[800,"Sargento"],[1300,"Suboficial"],[2000,"Oficial"],[3000,"Jefe de parque"]];
+function rankScore(lo){ let n=0; if(lo) for(const k in lo){ if(lo[k]===1 && ITEMS[k] && ITEMS[k][0]!=="S") n++; } return n; }
+function rankOf(pid){ const lo = pid===S.pid && SRS.loaded ? SRS.lo : BAR.lo[pid]; if(!lo) return null; const n=rankScore(lo); let i=0; while(i+1<RANKS.length && n>=RANKS[i+1][0]) i++; return {i,n,name:RANKS[i][1],next:RANKS[i+1]||null,base:RANKS[i][0]}; }
+function rankTag(pid){ const r=rankOf(pid); return r?`<span class="rank">${"★".repeat(r.i)||"·"} ${esc(r.name)}</span>`:""; }
+// ----- PERSONAJE POR RANGO -----
+function firefighterSVG(rank, uid){
+  // rank: 0 Aspirante,1 Bombero,2 Cabo,3 Sargento,4 Suboficial,5 Oficial,6 Jefe
+  const H=[["#22324A","#16233A"],["#F4C21B","#C99A08"],["#D7261E","#9E1610"],["#F07B12","#B8560A"],["#B9C2CC","#808B97"],["#F5F5F2","#C9CCCF"],["#F5F5F2","#C9CCCF"]][rank];
+  const id="f"+uid;
+  const cap = rank===0;
+  const helmet = cap
+    ? `<path d="M40 40 q20 -18 40 0 v6 h-40z" fill="url(#${id}h)"/><path d="M38 45 h48 q-2 5 -10 5 h-38z" fill="#16233A"/>`
+    : `<path d="M36 44 q0 -26 24 -27 q24 1 24 27z" fill="url(#${id}h)"/><path d="M58 18 h4 v26 h-4z" fill="${H[1]}" opacity=".55"/><ellipse cx="60" cy="45" rx="30" ry="5" fill="url(#${id}h)"/><ellipse cx="60" cy="45" rx="30" ry="5" fill="none" stroke="${H[1]}" stroke-width="1"/><path d="M53 26 h14 l-2 11 h-10z" fill="#E8B23A" stroke="#8A5A10" stroke-width=".8"/>${rank===6?`<path d="M37 41 q23 6 46 0" stroke="#E8B23A" stroke-width="2.5" fill="none"/>`:""}${rank>=4?`<rect x="42" y="38" width="36" height="3" rx="1.5" fill="#15212C" opacity=".75"/>`:""}`;
+  const era = rank>=3 ? `<rect x="78" y="62" width="13" height="40" rx="6" fill="url(#${id}t)"/><rect x="80" y="58" width="9" height="6" rx="2" fill="#6B7783"/><path d="M84 64 q10 20 -8 34" stroke="#15212C" stroke-width="2.4" fill="none"/>` : "";
+  const axe = (rank>=2 && rank<=4) ? `<g transform="rotate(-18 28 118)"><rect x="25" y="84" width="5" height="58" rx="2" fill="#7A4A22"/><path d="M14 86 q8 -6 18 -2 v12 q-10 4 -18 -2z" fill="#C9D1D8" stroke="#6B7783" stroke-width="1"/><path d="M30 84 l9 6 l-9 4z" fill="#C42A1C"/></g>` : "";
+  const radio = rank>=5 ? `<rect x="80" y="74" width="9" height="16" rx="2" fill="#15212C"/><rect x="83" y="66" width="2" height="9" fill="#15212C"/><rect x="82" y="78" width="5" height="4" fill="#4CC08A"/>` : "";
+  const hose = rank===1 ? `<path d="M30 140 q-14 -10 -6 -30 q6 -14 12 -22" stroke="#C42A1C" stroke-width="5" fill="none" stroke-linecap="round"/><rect x="33" y="82" width="7" height="10" rx="2" fill="#B9C2CC"/>` : "";
+  const stars = rank>=5 ? `<g fill="#E8B23A">${[0,1,2].slice(0,rank===6?3:2).map(k=>`<path transform="translate(${50+k*8} 76)" d="M0 -3 l1 2 2 .3 -1.5 1.4 .4 2.1 -1.9 -1 -1.9 1 .4 -2.1 -1.5 -1.4 2 -.3z"/>`).join("")}</g>` : "";
+  const stripe = cap ? "" : `<rect x="40" y="96" width="40" height="5" fill="#E7E9EC"/><rect x="40" y="97.5" width="40" height="2" fill="#F4C21B"/>`;
+  return `<svg viewBox="0 0 120 170" width="100%" height="100%" role="img" aria-label="Bombero">
+  <defs><linearGradient id="${id}h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${H[0]}"/><stop offset="1" stop-color="${H[1]}"/></linearGradient>
+  <linearGradient id="${id}j" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1F2B3A"/><stop offset=".5" stop-color="#2E3E52"/><stop offset="1" stop-color="#1F2B3A"/></linearGradient>
+  <linearGradient id="${id}t" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9AA6B1"/><stop offset=".5" stop-color="#E9EEF2"/><stop offset="1" stop-color="#8A96A1"/></linearGradient>
+  <radialGradient id="${id}s" cx=".45" cy=".4" r=".6"><stop offset="0" stop-color="#F6CFAE"/><stop offset="1" stop-color="#D9A27C"/></radialGradient></defs>
+  <ellipse cx="60" cy="163" rx="30" ry="4" fill="#000" opacity=".15"/>
+  ${era}
+  <path d="M44 128 h14 v28 h-14z" fill="#1A2533"/><path d="M62 128 h14 v28 h-14z" fill="#1A2533"/>
+  ${cap?"":`<rect x="44" y="140" width="14" height="4" fill="#E7E9EC"/><rect x="62" y="140" width="14" height="4" fill="#E7E9EC"/>`}
+  <path d="M41 154 h18 v9 h-20 q0 -6 2 -9z" fill="#111"/><path d="M61 154 h18 q2 3 2 9 h-20z" fill="#111"/>
+  <path d="M38 66 q22 -10 44 0 l2 64 h-48z" fill="url(#${id}j)"/>
+  <path d="M60 64 v66" stroke="#111A24" stroke-width="1.5"/>
+  ${stripe}
+  ${cap?`<text x="60" y="88" text-anchor="middle" font-size="7" font-family="Arial" font-weight="700" fill="#F4C21B">BOMBERS</text>`:`<rect x="40" y="118" width="40" height="5" fill="#E7E9EC"/><rect x="40" y="119.5" width="40" height="2" fill="#F4C21B"/>`}
+  ${stars}
+  <path d="M38 68 q-10 6 -12 32 l8 2 q2 -20 8 -26z" fill="url(#${id}j)"/><path d="M82 68 q10 6 12 32 l-8 2 q-2 -20 -8 -26z" fill="url(#${id}j)"/>
+  ${cap?"":`<path d="M27 92 l8 2 -.6 4 -8 -2z" fill="#E7E9EC"/><path d="M93 92 l-8 2 .6 4 8 -2z" fill="#E7E9EC"/>`}
+  <circle cx="30" cy="104" r="5.5" fill="#15212C"/><circle cx="90" cy="104" r="5.5" fill="#15212C"/>
+  ${radio}
+  <rect x="53" y="56" width="14" height="10" fill="#D9A27C"/>
+  <circle cx="60" cy="48" r="15" fill="url(#${id}s)"/>
+  <circle cx="54.5" cy="48" r="1.8" fill="#15212C"/><circle cx="65.5" cy="48" r="1.8" fill="#15212C"/>
+  <path d="M55 55 q5 4 10 0" stroke="#7A3B2A" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  ${rank>=3?`<path d="M45 52 q-4 4 -2 8" stroke="#15212C" stroke-width="1.4" fill="none"/>`:""}
+  <g transform="translate(0,-4)">${helmet}</g>
+  ${axe}${hose}
+  </svg>`;
+}
+function rankCardHTML(){
+  const r=rankOf(S.pid); if(!r) return "";
+  const pct = r.next ? Math.min(100,Math.round(100*(r.n-r.base)/(r.next[0]-r.base))) : 100;
+  return `<div class="card"><div style="display:flex;gap:14px;align-items:center"><div style="width:96px;height:136px;flex:none">${firefighterSVG(r.i,"me")}</div><div style="min-width:0;flex:1"><div class="eyebrow">Tu rango</div><h3 style="font-size:26px;margin-top:2px">${"★".repeat(r.i)} ${esc(r.name)}</h3><span class="muted" style="font-size:14px">${r.n.toLocaleString("es-ES")} sitios dominados</span>${r.next?`<p class="muted" style="margin:4px 0 0;font-size:13px">Siguiente: <b>${esc(r.next[1])}</b> · ${RANK_LOOK[r.i+1]}</p>`:""}</div></div>
+    <div class="rbar"><i style="width:${pct}%"></i></div><p class="muted" style="margin:6px 0 0;font-size:13px">${r.next?`Te faltan <b>${(r.next[0]-r.n).toLocaleString("es-ES")}</b> para <b>${esc(r.next[1])}</b>.`:"Rango máximo."} Cuenta cada sitio cuya última respuesta fue un acierto completo: si lo fallas, deja de contar. Calidad, no cantidad.</p></div>`;
+}
+// ----- COMBOS -----
+const comboMult = c => c>=10 ? 1.5 : 1;
+const COMBO_MODES = new Set(["free","aviso","srs","fails","barrio"]);
+// ----- MODO AVISO -----
+const AV_T = {
+  "Teatro":["Humo en la sala principal","Incendio en el escenario","Persona atrapada en el ascensor"], "Cine":["Humo en una sala","Incendio en la cabina de proyección"],
+  "Hospital":["Alarma de incendio en una planta","Humo en cocinas","Evacuación por fuga de gas"], "Centro de salud":["Humo en el centro","Fuga de gas"], "Instalaciones sanitarias":["Alarma de incendio en una planta","Humo en cocinas","Fuga de gas"],
+  "Museo":["Humo en la cubierta","Desprendimiento de cascotes en la fachada","Alarma de incendio"], "Monumento":["Humo en la cubierta","Desprendimiento de cascotes en la fachada","Incendio en el interior"],
+  "Metro / tranvía":["Humo en el andén","Persona atrapada en las escaleras mecánicas"], "Mercado municipal":["Incendio en un puesto","Fuga de gas en el mercado"], "Mercados":["Incendio en un puesto","Fuga de gas en el mercado"],
+  "Instalación deportiva":["Incendio en los vestuarios","Persona herida en altura"], "Instalaciones deportivas":["Incendio en los vestuarios","Persona herida en altura"],
+  "Instalaciones educativas":["Alarma de incendio con alumnos dentro","Humo en un aula"], "Bienestar Social":["Incendio en una habitación con residentes","Alarma de incendio con personas mayores","Persona atrapada en el ascensor"],
+  "Bibliotecas":["Humo en la sala de lectura","Alarma de incendio"], "Teatros":["Humo en la sala principal","Incendio en el escenario"], "Policía":["Incendio en el aparcamiento","Fuga de gas"],
+  "Parque / jardín":["Incendio de vegetación","Árbol caído con personas atrapadas"], "Hospital / centro":["Alarma de incendio en una planta","Humo en cocinas"],
+  "_C":["Incendio de vivienda","Accidente de tráfico con atrapados","Fuga de gas en un edificio","Árbol caído sobre un vehículo","Incendio de contenedores","Persona atrapada en un ascensor","Cascotes en la vía pública"],
+  "_":["Alarma de incendio","Incendio en el edificio","Persona atrapada en el ascensor"]
+};
+function avisoText(id){ const it=ITEMS[id]; const ty = it[0]==="C" ? "_C" : (it[0]==="E"||it[0]==="M") ? typeOf(it) : it[0]==="H" ? "Hospital / centro" : it[2];
+  const arr = AV_T[ty] || AV_T._; return arr[hashStr("av|"+id+"|"+(S.quiz?.seed||0))() % arr.length]; }
+function avisoIds(){ const r=Math.random, B=k=>activePool(BYBLOCK[k]||[]).filter(i=>!Array.isArray(ITEMS[i][3]) && ITEMS[i][4]>=0);
+  const pick=(k,n)=>sample(B(k),n,r); const ids=[...pick("R",4),...pick("K",2),...pick("M",1),...pick("H",1),...pick("C",2)];
+  return sample([...new Set(ids)], 10, r); }
+// ----- JEFE FINAL DEL VIERNES -----
+function isSunday(ds){ return new Date(ds+"T12:00:00Z").getUTCDay()===0; }
+function lastSunday(ds){ let d=ds; while(!isSunday(d)) d=addDays(d,-1); return d; }
+function bossIds(fri){
+  const mon=addDays(fri,-6), cnt={}, fl=flaggedSet(Date.now()+1);
+  const add=(from,to)=>{ for(const p of playerList()){ const d=S.days[p.id]||{}; for(const ds in d){ if(ds<from||ds>to) continue; const o=d[ds].o||{}; for(const k in o) if(o[k]===0) cnt[k]=(cnt[k]||0)+1; for(const a of (d[ds].dy?.ans||[])){ const id=Array.isArray(a)?a[0]:a.i, sc=Array.isArray(a)?a[1]:a.s; if(sc<1) cnt[id]=(cnt[id]||0)+1; } } } };
+  add(mon, addDays(fri,-1));
+  const ok=k=>ITEMS[k] && ITEMS[k][0]!=="S" && !Array.isArray(ITEMS[k][3]) && !fl.has(+k);
+  let ids=Object.keys(cnt).filter(ok).sort((a,b)=>cnt[b]-cnt[a] || (+a)-(+b)).slice(0,20).map(Number);
+  if(ids.length<20){ const c2={}; Object.assign(c2,cnt); for(const k in cnt) delete cnt[k]; add(addDays(fri,-28), addDays(fri,-1));
+    for(const k of Object.keys(cnt).filter(ok).sort((a,b)=>cnt[b]-cnt[a] || (+a)-(+b))){ if(ids.length>=20) break; if(!ids.includes(+k)) ids.push(+k); } }
+  return ids;
+}
+function bossHTML(){
+  const t=today(), fri=lastSunday(t); if(addDays(fri,1)<t) return "";
+  const ids=bossIds(fri); if(ids.length<5) return "";
+  const mine=myDays()[fri]?.jf, done=!!mine?.done, isToday = fri===t;
+  const ps=playerList().map(p=>({p,j:S.days[p.id]?.[fri]?.jf})).filter(x=>x.j?.done).sort((a,b)=>(b.j.pts-a.j.pts)||(a.j.ms-b.j.ms));
+  let h=`<div class="card" style="border:2px solid var(--brand)"><div class="eyebrow" style="color:var(--brand)">${isToday?"Hoy es domingo":"Resultado del "+esc(longDate(fri))}</div><div class="spread" style="margin-top:4px"><div style="flex:1 1 240px;min-width:0"><h2 style="font-size:30px">Jefe final</h2><p class="muted" style="margin:4px 0 0">Los ${ids.length} sitios que más ha fallado el grupo de lunes a sábado. Un solo intento; gana quien más acierte y, si empatan, quien tarde menos.</p></div>${done?`<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ ${ids.length} · ${fmtT(mine.ms||0)}</span></div>`:""}</div>`;
+  if(!done && isToday) h+=`<div class="row" style="margin-top:12px"><button class="btn" id="startBoss">${mine?.ans?.length?`Seguir (${mine.ans.length}/${ids.length})`:"Enfrentarse al jefe"}</button></div>`;
+  if(ps.length && (done || !isToday)) h+=`<div class="fails" style="margin-top:12px">${ps.map((x,i)=>`<div class="f"><span>${i===0?"🏆 ":""}${whoHTML(x.p.id)}</span><span class="num">${fmt(x.j.pts)} · ${fmtT(x.j.ms||0)}</span></div>`).join("")}</div>`;
+  else if(ps.length) h+=`<p class="muted" style="margin:10px 0 0;font-size:13px">${ps.length} ${ps.length===1?"ya lo ha":"ya lo han"} derrotado. Verás sus notas cuando juegues.</p>`;
+  return h+`</div>`;
 }
 function playerList(){ return Object.entries(S.players).map(([id,p])=>({id,...p})).sort((a,b)=>(a.since||0)-(b.since||0)); }
 function colorOf(pid){ const ids = playerList().map(p=>p.id); const i = ids.indexOf(pid); return PCOL[(i<0?0:i)%PCOL.length]; }
@@ -499,7 +606,7 @@ function setView(v){
 }
 document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.v)));
 
-function quizHome(m){ return (m==="daily"||m==="duel")?"hoy":(m==="srs"||m==="fails")?"fallos":"libre"; }
+function quizHome(m){ return (m==="daily"||m==="duel"||m==="boss")?"hoy":(m==="srs"||m==="fails")?"fallos":m==="aviso"?"rutas":"libre"; }
 function render(){
   document.querySelectorAll("nav.tabs button").forEach(b=>{
     b.setAttribute("aria-selected", String(b.dataset.v===S.view));
@@ -524,7 +631,7 @@ function render(){
   else html += fallosHTML();
   main.innerHTML = `<section class="view">${html}</section>`;
   bindView();
-  if(S.view==="rutas") bindRoutes();
+  if(S.view==="rutas" && !S.quiz) bindRoutes();
   if(S.view==="fallos" && SRS.loaded && !S.quiz && srsSpread()) render();
 }
 
@@ -539,6 +646,7 @@ function hoyHTML(){
   const ids = dailyIds(ds);
   const done = !!mine?.done; const started = mine && !done && (mine.ans||[]).length>0;
   let h = offlineNote();
+  const rc = rankCardHTML();
   h += `<div class="card"><div class="eyebrow">${esc(longDate(ds))}</div><div class="spread" style="margin-top:6px">
     <div><h2 style="font-size:30px">Reto del día</h2><p class="muted" style="margin:4px 0 0">${dailyIds(ds).length} preguntas, las mismas para todos: ${mixText(dailyPlan(ds).mix)}. Solo vale el primer intento. En empate gana quien tarde menos.</p></div>`;
   if(done) h += `<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ ${mine.n||dailyIds(ds).length} · ${fmtT(mine.ms||0)}</span></div>`;
@@ -546,6 +654,7 @@ function hoyHTML(){
   if(!done) h += `<div class="row" style="margin-top:14px"><button class="btn" id="startDaily">${started?`Seguir (${mine.ans.length}/${dailyIds(ds).length})`:"Empezar reto"}</button></div>`;
   h += `</div>`;
   if(done && S.db && S.canWrite) h += `<form class="card" id="msgForm" style="display:flex;flex-direction:column;gap:8px"><label class="eyebrow" for="msgIn">Tu pulla del día</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="msgIn" maxlength="80" placeholder="Ej.: Mañana os vuelvo a barrer" value="${esc(mine.msg||"")}"><button class="btn small" type="submit">${mine.msg?"Cambiar":"Publicar"}</button></div><span class="muted" style="font-size:13px">Sale junto a tu nota en la clasificación de hoy. Los demás la ven cuando terminan su reto.</span></form>`;
+  h += bossHTML();
   // status of others
   const ps = playerList();
   if(ps.length){
@@ -568,6 +677,7 @@ function hoyHTML(){
     if(yw.length) h += `<p class="muted" style="margin:0;font-size:14px">Ayer ganó <b style="color:var(--ink)">${esc(yw[0].p.alias)}</b> con ${fmt(yw[0].dy.pts)} puntos en ${fmtT(yw[0].dy.ms)}.</p>`;
   }
   h += duelsHTML();
+  h += rc;
   h += feedHTML();
   return h;
 }
@@ -646,9 +756,15 @@ function rangeDays(r){
 }
 function rankHTML(){
   const seg=`<div class="seg" role="group" style="align-self:flex-start"><button data-rmode="liga" aria-pressed="${S.rankMode!=="bar"}">La liga</button><button data-rmode="bar" aria-pressed="${S.rankMode==="bar"}">Barrios y mapa</button></div>`;
-  return seg + (S.rankMode==="bar" ? zonasHTML() : ligaHTML());
+  return seg + (S.rankMode==="bar" ? zonasHTML() : ligaHTML() + dotacionHTML());
+}
+function dotacionHTML(){
+  const ps=playerList().map(p=>({p,r:rankOf(p.id)})).filter(x=>x.r).sort((a,b)=>b.r.n-a.r.n);
+  if(!ps.length) return "";
+  return `<div class="card"><div class="spread"><h3 style="font-size:24px">La dotación</h3><span class="muted" style="font-size:13px">Rango por sitios dominados</span></div><div style="display:flex;gap:6px;justify-content:space-around;flex-wrap:wrap;margin-top:8px">${ps.map(x=>`<div style="flex:1 1 0;min-width:0;max-width:130px;text-align:center"><div style="width:80px;height:113px;margin:0 auto">${firefighterSVG(x.r.i,x.p.id)}</div><div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(aliasOf(x.p.id))}</div><div class="rank" style="margin:0">${"★".repeat(x.r.i)} ${esc(x.r.name)}</div><div class="muted" style="font-size:12px">${x.r.n.toLocaleString("es-ES")}</div></div>`).join("")}</div></div>`;
 }
 function ligaHTML(){
+  if(S.db && Date.now()-BAR.loAt>120000) setTimeout(()=>loadAllLo(false),0);
   const [from,to] = rangeDays(S.rankRange);
   const ps = playerList();
   const rows = ps.map(p=>{
@@ -674,7 +790,7 @@ function ligaHTML(){
   else{
     h += `<div class="scroll"><table class="tbl"><thead><tr><th>#</th><th>Jugador</th><th>Puntos</th><th>Pts reto</th><th>Acierto</th><th>Retos</th><th title="Retos diarios ganados (días cerrados)">Ganados</th><th title="Días seguidos haciendo el reto">Racha</th></tr></thead><tbody>`;
     rows.forEach((r,i)=>{
-      h += `<tr class="${r.p.id===S.pid?"me":""}"><td class="pos ${i===0&&r.pts>0?"p1":""}">${i+1}</td><td>${whoHTML(r.p.id)}</td><td class="big">${fmt(r.pts)}</td><td>${fmt(r.dpts)}</td><td>${r.n?Math.round(r.acc*100)+" %":"–"}</td><td>${r.retos}</td><td>${winsBy[r.p.id]||0}</td><td>${r.streak?r.streak+" d":"–"}</td></tr>`;
+      h += `<tr class="${r.p.id===S.pid?"me":""}"><td class="pos ${i===0&&r.pts>0?"p1":""}">${i+1}</td><td>${whoHTML(r.p.id)}${rankTag(r.p.id)}</td><td class="big">${fmt(r.pts)}</td><td>${fmt(r.dpts)}</td><td>${r.n?Math.round(r.acc*100)+" %":"–"}</td><td>${r.retos}</td><td>${winsBy[r.p.id]||0}</td><td>${r.streak?r.streak+" d":"–"}</td></tr>`;
     });
     h += `</tbody></table></div>`;
     const lead = rows[0], me = rows.find(r=>r.p.id===S.pid);
@@ -1150,6 +1266,7 @@ function rutasHTML(){
   if(R && R.i<R.list.length) return h+routeQuestionHTML();
   if(R && R.i>=R.list.length){ h+=routeSummaryHTML(); }
   const ds=today(), mine=myDays()[ds]?.rd, done=!!mine?.done;
+  h+=`<div class="card" style="border:2px solid var(--brand)"><div class="spread"><div style="flex:1 1 260px;min-width:0"><div class="eyebrow" style="color:var(--brand)">Como en el supuesto</div><h2 style="font-size:30px">Modo aviso</h2><p class="muted" style="margin:4px 0 0">Entran 10 avisos: «Humo en la sala principal · Teatro Carolina». Tú decides qué parque sale y quién apoya. Mezcla equipamientos clave, CLOCK, museos, hospitales y alguna calle. Suma a la liga como el entreno.</p></div><button class="btn" id="startAviso">Empezar guardia</button></div></div>`;
   h+=`<div class="card"><div class="eyebrow">${esc(longDate(ds))}</div><div class="spread" style="margin-top:6px"><div style="flex:1 1 260px;min-width:0"><h2 style="font-size:30px">Recorrido del día</h2><p class="muted" style="margin:4px 0 0">La misma calle para todos: el recorrido desde el parque que actúa y desde el que coopera. Escribe las calles por orden. Cada calle de la ruta que aciertes suma; cada calle que sobre resta medio. Nota sobre 10.</p></div>${done?`<div class="hero-score"><span class="num">${fmt(mine.pts)}</span><span class="muted">/ 10</span></div>`:`<button class="btn" id="rDaily">${mine?.ans?.length?"Seguir":"Empezar"}</button>`}</div></div>`;
   h+=routeBoardHTML(ds, done);
   h+=`<div class="card"><h3 style="font-size:24px">Practicar recorridos</h3><p class="muted" style="margin:4px 0 12px;font-size:14px">Una calle al azar y el recorrido desde su parque. No cuenta para la liga.</p><div class="seg" role="group">${[["p","Parque que actúa"],["a","Parque que coopera"],["b","Los dos"]].map(([k,l])=>`<button data-rorig="${k}" aria-pressed="${(S.rOrig||"p")===k}">${l}</button>`).join("")}</div><div style="margin-top:12px"><button class="btn" id="rPractice">Nuevo recorrido</button></div></div>`;
@@ -1255,7 +1372,7 @@ async function loadAllLo(force){
   if(S.pid && SRS.loaded) BAR.lo[S.pid]=SRS.lo;
   if(!S.db || (!force && Date.now()-BAR.loAt<120000)) return; BAR.loAt=Date.now();
   await Promise.all(playerList().filter(p=>p.id!==S.pid).map(async p=>{ try{ const d=await S.db.doc(`players/${p.id}/srs/main`).get(); BAR.lo[p.id]=d.exists?((d.data()||{}).lo||{}):{}; }catch{ BAR.lo[p.id]={}; } }));
-  if(S.view==="rank" && S.rankMode==="bar" && !S.quiz) render();
+  if(S.view==="rank" && !S.quiz) render();
 }
 function levelOf(items, lo){
   const ex=flaggedSet(Date.now()+1); let n=0,a=0,sum=0;
@@ -1565,7 +1682,8 @@ function bindBeasts(){
 
 // ----- QUIZ -----
 function startQuiz(mode, ids){
-  S.quiz = {mode, ids, i:0, sel:{p:null,a:null,multi:new Set()}, answered:false, results:[], seen:new Set(), req:new Set(), newSet:new Set(), t0:performance.now(), prev: mode==="surv"?survBest(S.pid):0};
+  S.quiz = {mode, ids, i:0, sel:{p:null,a:null,multi:new Set()}, answered:false, results:[], seen:new Set(), req:new Set(), newSet:new Set(), t0:performance.now(), prev: mode==="surv"?survBest(S.pid):0, combo:0, best:0, seed:Math.floor(Math.random()*1e6), tms:0};
+  if(mode==="boss"){ const jf=myDays()[today()]?.jf; if(jf?.ans?.length){ S.quiz.i=jf.ans.length; S.quiz.results=jf.ans.map(a=>({id:a.i,sc:a.s})); } }
   if(mode==="daily"){
     const dy = myDays()[today()]?.dy;
     if(dy?.ans?.length){ S.quiz.i = dy.ans.length; S.quiz.results = dy.ans.map(a=>Array.isArray(a)?{id:a[0],sc:a[1]}:{id:a.i,sc:a.s}); }
@@ -1578,11 +1696,11 @@ function quizHTML(){
   if(q.i>=q.ids.length) return summaryHTML();
   const id = q.ids[q.i], it = ITEMS[id];
   const multi = Array.isArray(it[3]), hasA = !multi && it[4]>=0;
-  const title = q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="srs"?"Repaso":q.mode==="duel"?"Duelo 1 vs 1":q.mode==="barrio"?"Práctica de barrio":q.mode==="surv"?"Supervivencia":"Entreno libre";
+  const title = q.mode==="boss"?"Jefe final":q.mode==="aviso"?"Modo aviso":q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="srs"?"Repaso":q.mode==="duel"?"Duelo 1 vs 1":q.mode==="barrio"?"Práctica de barrio":q.mode==="surv"?"Supervivencia":"Entreno libre";
   const got = q.results.reduce((s,r)=>s+r.sc,0);
-  let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got)} pts</span></div>
+  let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got+(q.bonus||0))} pts${COMBO_MODES.has(q.mode)&&q.combo>=3?`<span class="combo${q.combo>=10?" hot":""}">🔥 ${q.combo}${comboMult(q.combo)>1?` · ×${String(comboMult(q.combo)).replace(".",",")}`:""}</span>`:""}</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
-    <div class="plaque"><span class="kind">${esc(kindOf(it))}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])&&(q.mode==="daily"||(S.free.addr&&!(q.mode==="free"&&S.free.blocks.has("R")&&!S.free.blocks.has("E")&&(BYBLOCK.R||[]).includes(id)))||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`;
+    ${q.mode==="aviso"?`<div class="plaque"><span class="kind aviso-kind">Aviso 112 · ${esc(avisoText(id))}</span><span class="name">${esc(it[1])}</span>${q.answered?`<span class="info">${esc(it[0]==="C"?"Calle":kindOf(it))}</span>`:""}</div>`:`<div class="plaque"><span class="kind">${esc(kindOf(it))}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])&&(q.mode==="daily"||(S.free.addr&&!(q.mode==="free"&&S.free.blocks.has("R")&&!S.free.blocks.has("E")&&(BYBLOCK.R||[]).includes(id)))||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`}`;
   const isS = it[0]==="S";
   const btns = (row) => (isS?SZONES:PARKS).map((_,i)=>{
     let cls = "", pressed = row==="multi"?q.sel.multi.has(i):q.sel[row]===i;
@@ -1619,10 +1737,11 @@ function summaryHTML(){
     <div class="row" style="margin-top:14px"><button class="btn" id="again">Otra vez</button><button class="btn ghost" id="closeQ">Cerrar</button></div></div>
     ${last&&last.sc<1?`<div class="card"><div class="eyebrow" style="margin-bottom:6px">Te ha eliminado</div><div class="fails"><div class="f"><span>${markHTML(last.sc)} <b>${esc(ITEMS[last.id][1])}</b></span>${ansHTML(ITEMS[last.id])}</div></div></div>`:""}`; }
   const miss = q.results.filter(r=>r.sc<1);
-  let h = `<div class="card"><div class="eyebrow">${q.mode==="daily"?"Reto del día terminado":q.mode==="srs"?"Repaso terminado":q.mode==="duel"?"Duelo terminado":"Tanda terminada"}</div>
-    <div class="hero-score" style="margin-top:6px"><span class="num">${fmt(tot)}</span><span class="muted">/ ${q.ids.length}${q.mode==="daily"?" · "+fmtT(myDays()[today()]?.dy?.ms||0):""}</span></div>
+  let h = `<div class="card"><div class="eyebrow">${q.mode==="boss"?"Jefe final terminado":q.mode==="aviso"?"Guardia terminada":q.mode==="daily"?"Reto del día terminado":q.mode==="srs"?"Repaso terminado":q.mode==="duel"?"Duelo terminado":"Tanda terminada"}</div>
+    <div class="hero-score" style="margin-top:6px"><span class="num">${fmt(tot)}</span><span class="muted">/ ${q.ids.length}${q.mode==="daily"?" · "+fmtT(myDays()[today()]?.dy?.ms||0):q.mode==="boss"?" · "+fmtT(myDays()[today()]?.jf?.ms||0):q.mode==="aviso"?" · "+fmtT(q.tms||0):""}</span></div>
+    ${q.bonus?`<p style="margin:8px 0 0">🔥 Mejor combo: <b>${q.best}</b> seguidas · <b>+${fmt(q.bonus)}</b> puntos extra para la liga.</p>`:""}
     ${q.mode==="srs"?`<p class="muted" style="margin:8px 0 0">Mañana te tocan ${srsForecast(1)} tarjetas.</p>`:""}${q.mode==="duel"?duelSummary(q):""}
-    <div class="row" style="margin-top:14px">${q.mode==="daily"?`<button class="btn" id="seeRank">Ver la clasificación</button>`:q.mode==="srs"?(srsDueCount()?`<button class="btn" id="again">Seguir repasando</button>`:""):q.mode==="duel"?"":`<button class="btn" id="again">Otra tanda</button>`}<button class="btn ghost" id="closeQ">Cerrar</button></div></div>`;
+    <div class="row" style="margin-top:14px">${q.mode==="daily"?`<button class="btn" id="seeRank">Ver la clasificación</button>`:q.mode==="srs"?(srsDueCount()?`<button class="btn" id="again">Seguir repasando</button>`:""):q.mode==="duel"||q.mode==="boss"?"":`<button class="btn" id="again">${q.mode==="aviso"?"Otra guardia":"Otra tanda"}</button>`}<button class="btn ghost" id="closeQ">Cerrar</button></div></div>`;
   if(miss.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Para repasar</div><div class="fails">${miss.map(r=>{const it=ITEMS[r.id]; return `<div class="f"><span>${markHTML(r.sc)} <b>${esc(it[1])}</b></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
   return h;
 }
@@ -1633,16 +1752,23 @@ function answer(){
   // Ubicaciones Saler: solo para estudiar. No suman puntos, ni estadísticas, ni fallos, ni insignias, ni repaso.
   if(it[0]==="S"){ render(); return; }
   if(q.mode==="duel") duelAnswer(q, id, sc, ms);
+  q.tms=(q.tms||0)+ms;
+  let bonus=0;
+  if(COMBO_MODES.has(q.mode)){ if(sc===1){ q.combo=(q.combo||0)+1; q.best=Math.max(q.best||0,q.combo); bonus=comboMult(q.combo)-1; q.bonus=(q.bonus||0)+bonus; if(q.combo===10&&navigator.vibrate){ try{navigator.vibrate([40,40,80]);}catch{} } } else q.combo=0; }
   if(S.db && S.pid){
     mutateDay(today(), d=>{
-      if(q.mode==="daily"){
+      if(q.mode==="boss"){
+        d.jf = d.jf || {ans:[],pts:0,ms:0,done:false,n:q.ids.length};
+        d.jf.ans.push({i:id,s:sc,t:ms}); d.jf.pts += sc; d.jf.ms += ms;
+        if(d.jf.ans.length>=q.ids.length){ d.jf.done=true; d.jf.end=Date.now(); }
+      } else if(q.mode==="daily"){
         d.dy = d.dy || {ans:[],pts:0,ms:0,done:false,start:Date.now(),n:q.ids.length};
         if(!d.dy.n) d.dy.n = q.ids.length;
         d.dy.ans.push({i:id,s:sc,t:ms}); d.dy.pts += sc; d.dy.ms += ms;
         if(d.dy.ans.length>=q.ids.length){ d.dy.done = true; d.dy.end = Date.now(); }
       } else {
         d.fr = d.fr || {n:0,pts:0,ok:0};
-        d.fr.n++; d.fr.pts += sc; if(sc===1) d.fr.ok++;
+        d.fr.n++; d.fr.pts += sc; if(sc===1) d.fr.ok++; if(bonus) d.fr.bonus = Math.round(((d.fr.bonus||0)+bonus)*10)/10;
         if(q.mode==="surv" && sc<1) addSurv(d, q.results.length-1);
       }
       recordOutcome(d, id, sc);
@@ -1752,7 +1878,9 @@ function bindView(){
   document.querySelectorAll("[data-sort]").forEach(b=>b.addEventListener("click",()=>{ S.rankSort=b.dataset.sort; render(); }));
   const mf=$("#msgForm"); if(mf) mf.addEventListener("submit", e=>{ e.preventDefault(); const v=$("#msgIn").value.trim().slice(0,80); mutateDay(today(), d=>{ if(d.dy) d.dy.msg=v; }); render(); });
   on("#closeQ", ()=>{ S.quiz=null; render(); });
-  on("#again", ()=>{ const m=S.quiz.mode; S.quiz=null; if(m==="surv") return startQuiz("surv", sample(activePool(BYBLOCK.C), 400, Math.random)); if(m==="srs") return startSrs(); if(m==="fails"){ const s=[...pendingFails()]; if(s.length) return startQuiz("fails", sample(s,Math.min(20,s.length),Math.random)); render(); } else { const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); } });
+  on("#startBoss", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); const ids=bossIds(today()); if(ids.length) startQuiz("boss", ids); });
+  on("#startAviso", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("aviso", avisoIds()); });
+  on("#again", ()=>{ const m=S.quiz.mode; S.quiz=null; if(m==="aviso") return startQuiz("aviso", avisoIds()); if(m==="surv") return startQuiz("surv", sample(activePool(BYBLOCK.C), 400, Math.random)); if(m==="srs") return startSrs(); if(m==="fails"){ const s=[...pendingFails()]; if(s.length) return startQuiz("fails", sample(s,Math.min(20,s.length),Math.random)); render(); } else { const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); } });
   on("#seeRank", ()=>{ S.quiz=null; S.rankRange="hoy"; render(); });
   on("#checkMulti", answer);
   document.querySelectorAll(".park").forEach(b=>b.addEventListener("click",()=>pickPark(b.dataset.row, +b.dataset.i)));
