@@ -315,7 +315,7 @@ const firebaseConfig = {
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
 const DATA_V = "20";
-const APP_V = "36";
+const APP_V = "37";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
@@ -1307,6 +1307,34 @@ let RNAMES=null;
 function routeNames(){ if(!RNAMES){ const seen=new Set(); RNAMES=[]; for(const id of BYBLOCK.C||[]){ const it=ITEMS[id]; const es=esName(it); for(const [nm,alt] of [[it[1],es],[es,it[1]]]){ if(!nm) continue; const k=rnorm(nm); if(!seen.has(k+"|"+alt)){ seen.add(k+"|"+alt); RNAMES.push([nm,k,alt]); } } } } return RNAMES; }
 function routePool(){ return activePool((BYBLOCK.C||[]).filter(id=>itemLL(ITEMS[id]) && ITEMS[id][4]>=0)); }
 function dailyRoute(ds){ const rnd=mulberry(hashStr("ruta|"+ds)()); const ex=flaggedSet(dayStart(ds)); const pool=(BYBLOCK.C||[]).filter(id=>ITEMS[id][5]!=null && ITEMS[id][4]>=0 && !ex.has(id)); return sample(pool,1,rnd)[0]; }
+// Cruces de cada salida habitual (calculados con el trazado oficial de calles), en el mismo orden que STATIONS[k].r.
+const STATION_WP=[[[[39.48209,-0.35433],[39.48183,-0.351995],[39.47652,-0.35544]],[[39.48209,-0.35433],[39.48183,-0.351995],[39.47652,-0.35544],[39.47624,-0.355505]],[[39.48209,-0.35433],[39.48183,-0.351995]],[[39.48209,-0.35433],[39.48183,-0.351995],[39.476175,-0.33361],[39.47282,-0.3341]],[[39.48209,-0.35433],[39.48183,-0.351995],[39.47668,-0.33349]],[[39.48209,-0.35433],[39.48554,-0.36504]],[[39.47944,-0.356905],[39.47855,-0.35557]]],[[[39.4529,-0.365565],[39.450485,-0.370405],[39.44649,-0.36924]],[[39.448715,-0.36261],[39.44636,-0.36845]],[[39.4529,-0.365565],[39.45423,-0.361485]],[[39.4529,-0.365565],[39.45423,-0.361485],[39.456105,-0.356645]],[[39.45496,-0.366965],[39.458665,-0.358365],[39.45846,-0.35803]],[[39.45496,-0.366965],[39.458665,-0.358365],[39.46317,-0.36081]],[[39.45496,-0.366965],[39.456875,-0.37526],[39.45548,-0.37928],[39.46234,-0.38672]],[[39.45496,-0.366965],[39.456875,-0.37526]],[[39.45496,-0.366965],[39.45961,-0.36934],[39.46188,-0.3707],[39.46345,-0.37213]]],[[[39.46719,-0.40566],[39.46958,-0.40537],[39.467015,-0.39007],[39.46639,-0.38665],[39.466325,-0.386285],[39.46587,-0.3837],[39.46558,-0.38226]],[[39.465155,-0.403595]],[[39.46719,-0.40566],[39.45848,-0.40254]],[[39.46719,-0.40566],[39.45376,-0.399425],[39.45656,-0.390575]],[[39.46719,-0.40566],[39.450085,-0.39468]],[[39.46719,-0.40566],[39.44989,-0.394715]]],[[[39.4849,-0.40583],[39.487365,-0.405015]],[[39.4849,-0.40583],[39.48761,-0.40487]],[[39.48284,-0.40188]],[],[[39.483325,-0.404795],[39.48333,-0.40322],[39.481415,-0.406765]]],[[]]];
+async function osrmVia(pts, alts){
+  const c=pts.map(p=>p[1]+","+p[0]).join(";");
+  const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${c}?overview=full&geometries=geojson&steps=true${alts?"&alternatives=2":""}`);
+  if(!r.ok) throw new Error("http "+r.status); const j=await r.json(); if(j.code!=="Ok"||!j.routes?.length) throw new Error(j.code||"sin ruta");
+  return j.routes.map(rt=>{ const names=[]; for(const lg of rt.legs) for(const st of lg.steps){ const nm=(st.name||"").trim(); if(!nm) continue; if(names.length && rmatch(names[names.length-1],nm)) continue; names.push(nm); }
+    return {names, line: rt.geometry.coordinates.map(([lo,la])=>[la,lo]), km: rt.distance/1000, min: rt.duration/60}; });
+}
+async function pool(tasks, n){ const out=new Array(tasks.length); let i=0; await Promise.all(Array.from({length:Math.min(n,tasks.length)},async()=>{ while(i<tasks.length){ const k=i++; try{ out[k]=await tasks[k](); }catch{ out[k]=[]; } } })); return out; }
+// Recorridos guiados por las salidas habituales del parque: la más rápida y hasta dos alternativas parecidas.
+async function habitualRoutes(k, to){
+  const st=STATIONS[k], W=STATION_WP[k]||[], seen=new Set();
+  const tasks=[()=>osrmVia([st.ll,to],true)];
+  W.forEach((w,i)=>{ if(!w.length) return; const v=w.length>1?[w[0],w[w.length-1]]:[w[0]]; const key=JSON.stringify(v); if(seen.has(key)) return; seen.add(key);
+    tasks.push(()=>osrmVia([st.ll,...v,to]).then(rs=>rs.map(r=>({...r,ex:i})))); });
+  const all=(await pool(tasks,3)).flat(); if(!all.length) throw new Error("sin ruta");
+  const best=Math.min(...all.map(r=>r.min));
+  const starts=st.r.map(x=>x.replace("…","").split("–").map(t=>t.trim()));
+  const habitual=r=> r.ex!=null || starts.some(ns=>r.names.length && rmatchX(ns[0],r.names[0]) && (ns.length<2 || r.names.length<2 || rmatchX(ns[1],r.names[1])));
+  let c=all.filter(r=>r.min<=best*1.35 && habitual(r)); if(!c.length) c=all.filter(r=>r.min<=best*1.35);
+  c.sort((a,b)=>a.min-b.min);
+  const sim=(a,b)=>{ const A=new Set(a.names.map(rnorm)), B=new Set(b.names.map(rnorm)); let n=0; for(const x of A) if(B.has(x)) n++; return n/Math.max(A.size,B.size); };
+  const out=[]; for(const r of c){ if(out.some(o=>sim(o,r)>=0.85)) continue; if(r.ex!=null) r.via=st.r[r.ex]; out.push(r); if(out.length>=3) break; }
+  // Siempre al menos una alternativa, aunque se parezca más o salga por otro lado.
+  if(out.length<2){ const rest=all.filter(r=>!out.includes(r) && r.min<=best*1.6).sort((a,b)=>a.min-b.min); const alt=rest.find(r=>out.every(o=>sim(o,r)<1)); if(alt){ if(alt.ex!=null) alt.via=st.r[alt.ex]; out.push(alt); } }
+  return out.sort((a,b)=>a.min-b.min);
+}
 async function osrm(from, to){
   const url=`https://router.project-osrm.org/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=full&geometries=geojson&steps=true`;
   const r=await fetch(url); if(!r.ok) throw new Error("http "+r.status); const j=await r.json(); if(j.code!=="Ok"||!j.routes?.length) throw new Error(j.code||"sin ruta");
@@ -1315,7 +1343,7 @@ async function osrm(from, to){
   return {names, line: rt.geometry.coordinates.map(([lo,la])=>[la,lo]), km: rt.distance/1000, min: rt.duration/60};
 }
 function newRoute(mode, list){ S.route={mode, list, i:0, picks:[], checked:false, res:null, err:null, pend:null}; prepRoute(); render(); }
-function prepRoute(){ const R=S.route; if(!R||R.i>=R.list.length) return; const q=R.list[R.i]; const it=ITEMS[q.id]; loadGeo().then(()=>{ const to=itemLL(it); if(!to){ R.err="Sin ubicación"; return; } R.pend=osrm(STATIONS[q.o].ll, to).catch(e=>{ throw e; }); R.pend.catch(()=>{}); }); }
+function prepRoute(){ const R=S.route; if(!R||R.i>=R.list.length) return; const q=R.list[R.i]; const it=ITEMS[q.id]; loadGeo().then(()=>{ const to=itemLL(it); if(!to){ R.err="Sin ubicación"; return; } R.pend=habitualRoutes(q.o, to); R.pend.catch(()=>{}); }); }
 function routeScore(names, picks){
   const used=new Array(picks.length).fill(false), hit=names.map(()=>false);
   names.forEach((nm,k)=>{ const j=picks.findIndex((p,pi)=>!used[pi] && rmatchX(p,nm)); if(j>=0){ used[j]=true; hit[k]=true; } });
@@ -1325,7 +1353,9 @@ function routeScore(names, picks){
 }
 async function checkRoute(){
   const R=S.route; if(!R||R.checked) return; R.checking=true; render();
-  try{ if(!R.pend) await loadGeo(); const res=await R.pend; R.res={...res, ...routeScore(res.names, R.picks)}; R.checked=true; }
+  try{ if(!R.pend) await loadGeo(); const rs=await R.pend; const q=R.list[R.i];
+    const sc=rs.slice(0,2).map(r=>routeScore(r.names, R.picks)); let bi=0; sc.forEach((x,k)=>{ if(x.nota>sc[bi].nota) bi=k; });
+    const pkOk = R.pk===q.o; R.res={...rs[bi], ...sc[bi], routes:rs, bi, pkOk}; if(!pkOk) R.res.nota=0; R.checked=true; }
   catch(e){ R.err="No se ha podido calcular la ruta ahora mismo (el servicio de rutas no responde). Prueba en un rato."; }
   R.checking=false;
   if(R.checked && S.db && S.pid){ const q=R.list[R.i]; const nota=R.res.nota;
@@ -1336,12 +1366,12 @@ async function checkRoute(){
   }
   render();
 }
-function routeNext(){ const R=S.route; R.i++; R.picks=[]; R.checked=false; R.res=null; R.err=null; R.pend=null; if(R.i<R.list.length) prepRoute(); render(); }
+function routeNext(){ const R=S.route; R.i++; R.picks=[]; R.pk=null; R.checked=false; R.res=null; R.err=null; R.pend=null; if(R.i<R.list.length) prepRoute(); render(); }
 function routeAdd(txt){ const R=S.route; if(!R||R.checked) return; txt=String(txt||"").trim(); if(!txt) return; R.picks.push(txt); const inp=$("#rin"); if(inp){ inp.value=""; } drawPicks(); const s=$("#rsug"); if(s) s.innerHTML=""; if(inp) inp.focus(); }
 function drawPicks(){ const R=S.route, el=$("#rpicks"); if(!el) return;
   el.innerHTML = R.picks.length ? R.picks.map((p,k)=>`<span class="rchip"><span class="num">${k+1}</span>${esc(p)}<button aria-label="Quitar" data-rdel="${k}">×</button></span>`).join("") : `<span class="muted" style="font-size:13px">Añade las calles en orden, desde el parque hasta el destino.</span>`;
   el.querySelectorAll("[data-rdel]").forEach(b=>b.addEventListener("click",()=>{ R.picks.splice(+b.dataset.rdel,1); drawPicks(); }));
-  const c=$("#rcheck"); if(c) c.disabled=!R.picks.length;
+  const c=$("#rcheck"); if(c) c.disabled=!R.picks.length || R.pk==null;
 }
 function rsuggest(v){ const box=$("#rsug"); if(!box) return; const k=rnorm(v); if(k.length<2){ box.innerHTML=""; return; }
   const out=[]; for(const r of routeNames()){ if(r[1].startsWith(k)) out.push(r); if(out.length>=8) break; }
@@ -1357,13 +1387,13 @@ function drawRouteMap(){
   RMAP=L.map(el,{scrollWheelZoom:false, zoomAnimation:false, fadeAnimation:false, markerZoomAnimation:false});
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).addTo(RMAP);
   const pts=[st.ll];
-  L.circleMarker(st.ll,{radius:9,color:"#fff",weight:3,fillColor:"#15212C",fillOpacity:1}).addTo(RMAP).bindTooltip(st.n,{permanent:true,direction:"top",className:"rtip"});
+  if(R.checked) L.circleMarker(st.ll,{radius:9,color:"#fff",weight:3,fillColor:"#15212C",fillOpacity:1}).addTo(RMAP).bindTooltip(st.n,{permanent:true,direction:"top",className:"rtip"});
   loadGeo().then(()=>{ if(!RMAP) return; const lines=streetLines(it[9]); const dest=itemLL(it);
     // Como en el examen: el destino no se ve hasta comprobar.
-    if(!R.checked){ RMAP.fitBounds(L.latLngBounds(STATIONS.slice(0,4).map(s=>s.ll)).pad(0.2),{animate:false}); return; }
+    if(!R.checked){ RMAP.fitBounds(L.latLngBounds(STATIONS.slice(0,4).map(s=>s.ll)).pad(0.25),{animate:false}); return; }
     if(lines) lines.forEach(l=>{ L.polyline(l,{color:"#C42A1C",weight:7,opacity:.9}).addTo(RMAP); pts.push(...l); });
     if(dest){ L.circleMarker(dest,{radius:9,color:"#fff",weight:3,fillColor:"#C42A1C",fillOpacity:1}).addTo(RMAP); pts.push(dest); }
-    if(R.checked && R.res){ L.polyline(R.res.line,{color:"#2B63C6",weight:5,opacity:.85}).addTo(RMAP); pts.push(...R.res.line); }
+    if(R.checked && R.res){ const rs=R.res.routes||[R.res]; rs.slice().reverse().forEach((r,kk)=>{ const k=rs.length-1-kk; L.polyline(r.line,{color:RTCOL[k],weight:k?4:6,opacity:.9,dashArray:k?"8 6":null}).addTo(RMAP); pts.push(...r.line); }); }
     RMAP.fitBounds(L.latLngBounds(pts),{padding:[24,24],animate:false});
   });
 }
@@ -1392,19 +1422,25 @@ function routeBoardHTML(ds, done){
   return h+`</tbody></table></div>${done?"":`<p class="muted" style="font-size:13px;margin:10px 0 0">Las notas de hoy se ven cuando hagas el tuyo.</p>`}</div>`;
 }
 function routeQuestionHTML(){
-  const R=S.route, q=R.list[R.i], it=ITEMS[q.id], st=STATIONS[q.o];
-  let h=`<div class="qhead"><span class="eyebrow">${R.mode==="daily"?"Recorrido del día":"Práctica"} · ${R.i+1} de ${R.list.length}</span><span class="muted" style="font-size:13px">${q.role==="a"?"Parque que coopera":"Parque que actúa"}</span></div>
-  <div class="plaque"><span class="kind">Desde ${esc(st.n)}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"?`<span class="info">${esc(it[2])}</span>`:""}</div>
-  <div id="rmap" class="rmapbox" role="img" aria-label="Mapa con el parque de salida"></div>`;
+  const R=S.route, q=R.list[R.i], it=ITEMS[q.id], st=STATIONS[q.o], role=q.role==="a"?"coopera":"actúa";
+  let h=`<div class="qhead"><span class="eyebrow">${R.mode==="daily"?"Recorrido del día":"Práctica"} · ${R.i+1} de ${R.list.length}</span><span class="muted" style="font-size:13px">Parque que ${role}</span></div>
+  <div class="plaque"><span class="kind">${R.checked?`Desde ${esc(st.n)}`:`Sales del parque que ${role}`}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"?`<span class="info">${esc(it[2])}</span>`:""}</div>
+  <div id="rmap" class="rmapbox" role="img" aria-label="Mapa del recorrido"></div>`;
   if(!R.checked){
-    h+=`<div class="pick"><label class="eyebrow" for="rin">Tu recorrido</label><div id="rpicks" class="rpicks"></div><div class="rinwrap"><input class="input" id="rin" autocomplete="off" placeholder="Escribe una calle, en valenciano o castellano…"><div id="rsug" class="rsug"></div></div></div>
+    h+=`<div class="pick"><div class="lab"><span class="eyebrow">¿De qué parque sales?</span></div><div class="parks">${PARKS.map((_,i)=>`<button class="park" data-rpk="${i}" aria-pressed="${R.pk===i}" style="--pc:var(--p${i})"><i></i>${PSHORT[i]}</button>`).join("")}</div></div>
+    <div class="pick"><label class="eyebrow" for="rin">Tu recorrido</label><div id="rpicks" class="rpicks"></div><div class="rinwrap"><input class="input" id="rin" autocomplete="off" placeholder="Escribe una calle, en valenciano o castellano…"><div id="rsug" class="rsug"></div></div></div>
     ${R.err?`<div class="notice bad">${esc(R.err)}</div>`:""}
-    <div class="row"><button class="btn" id="rcheck" ${R.picks.length&&!R.checking?"":"disabled"}>${R.checking?"Calculando ruta…":"Comprobar"}</button>${R.err?`<button class="btn ghost" id="rskip">Saltar</button>`:""}<button class="btn ghost small" id="rquit">Salir</button></div>`;
+    <div class="row"><button class="btn" id="rcheck" ${R.picks.length&&R.pk!=null&&!R.checking?"":"disabled"}>${R.checking?"Calculando rutas…":"Comprobar"}</button>${R.err?`<button class="btn ghost" id="rskip">Saltar</button>`:""}<button class="btn ghost small" id="rquit">Salir</button></div>`;
   } else {
-    const r=R.res;
-    h+=`<div class="verdict ${r.nota>=7?"v1":r.nota>=4?"v05":"v0"}"><span>${r.h} de ${r.names.length} calles${r.x?` · ${r.x} de más`:""} · ${r.km.toFixed(1)} km, ${Math.round(r.min)} min</span><span class="pts">${fmt(r.nota)}/10</span></div>
-    <div class="card"><div class="eyebrow" style="margin-bottom:6px">Ruta más rápida</div><div class="fails">${r.names.map((nm,k)=>{ const alt=osmAlt(nm); return `<div class="f"><span><span class="num muted">${k+1}.</span> ${esc(nm)}${alt?` <span class="muted">· ${esc(alt)}</span>`:""}</span>${markHTML(r.hit[k]?1:0)}</div>`; }).join("")}</div>
-    ${r.x?`<div class="eyebrow" style="margin:12px 0 6px">Te sobran</div><div class="fails">${R.picks.filter((p,k)=>!r.used[k]).map(p=>`<div class="f"><span style="text-decoration:line-through">${esc(p)}</span>${markHTML(0)}</div>`).join("")}</div>`:""}</div>
+    const r=R.res, rs=r.routes||[r];
+    const head=r.pkOk===false ? `Parque equivocado: sales de <b>${esc(PSHORT[q.o])}</b>, no de ${esc(PSHORT[R.pk])}` : `${r.h} de ${r.names.length} calles${r.x?` · ${r.x} de más`:""}${rs.length>1?` · comparado con ${r.bi?"la alternativa":"la más rápida"}`:""}`;
+    h+=`<div class="verdict ${r.nota>=7?"v1":r.nota>=4?"v05":"v0"}"><span>${head}</span><span class="pts">${fmt(r.nota)}/10</span></div>`;
+    rs.forEach((x,k)=>{ const own=k===r.bi && r.pkOk!==false;
+      h+=`<div class="card"><div class="spread" style="margin-bottom:6px"><span class="eyebrow"><i style="display:inline-block;width:18px;height:5px;border-radius:3px;background:${RTCOL[k]};vertical-align:middle;margin-right:6px"></i>${k?`Alternativa${rs.length>2?" "+k:""}`:"Más rápida"}</span><span class="muted" style="font-size:13px">${x.km.toFixed(1).replace(".",",")} km · ${Math.round(x.min)} min</span></div>
+      ${x.via?`<p class="muted" style="font-size:12px;margin:0 0 6px">Salida habitual: ${esc(x.via.replace("…",""))}</p>`:""}
+      <div class="fails">${x.names.map((nm,j)=>{ const alt=osmAlt(nm); return `<div class="f"><span><span class="num muted">${j+1}.</span> ${esc(nm)}${alt?` <span class="muted">· ${esc(alt)}</span>`:""}</span>${own?markHTML(r.hit[j]?1:0):""}</div>`; }).join("")}</div>
+      ${own&&r.x?`<div class="eyebrow" style="margin:12px 0 6px">Te sobran</div><div class="fails">${R.picks.filter((p,j)=>!r.used[j]).map(p=>`<div class="f"><span style="text-decoration:line-through">${esc(p)}</span>${markHTML(0)}</div>`).join("")}</div>`:""}</div>`; });
+    h+=`<p class="muted" style="font-size:12px;margin:0">Rutas en coche con OpenStreetMap, saliendo por las salidas habituales del parque. Tu nota se compara con la que más se parezca a lo que has puesto.</p>
     <button class="btn" id="rnext">${R.i+1<R.list.length?"Siguiente":"Terminar"}</button>`;
   }
   return h;
@@ -1428,7 +1464,8 @@ function bindRoutes(){
   const on=(sel,fn)=>{ const el=$(sel); if(el) el.addEventListener("click",fn); };
   on("#rDaily", startDailyRoute); on("#rPractice", startPracticeRoute);
   document.querySelectorAll("[data-rorig]").forEach(b=>b.addEventListener("click",()=>{ S.rOrig=b.dataset.rorig; render(); }));
-  on("#backRep", ()=>{ S.route=null; setView("fallos"); }); on("#rcheck", checkRoute); on("#rnext", routeNext); on("#rskip", routeNext); on("#rquit", ()=>{ S.route=null; render(); });
+  on("#backRep", ()=>{ S.route=null; setView("fallos"); });
+  document.querySelectorAll("[data-rpk]").forEach(b=>b.addEventListener("click",()=>{ S.route.pk=+b.dataset.rpk; document.querySelectorAll("[data-rpk]").forEach(x=>x.setAttribute("aria-pressed",String(+x.dataset.rpk===S.route.pk))); drawPicks(); })); on("#rcheck", checkRoute); on("#rnext", routeNext); on("#rskip", routeNext); on("#rquit", ()=>{ S.route=null; render(); });
   const inp=$("#rin"); if(inp){ inp.addEventListener("input",()=>rsuggest(inp.value)); inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); const f=$("#rsug [data-rs]"); routeAdd(f?f.dataset.rs:inp.value); } }); }
   drawPicks(); drawRouteMap();
 }
@@ -1958,7 +1995,7 @@ async function osrmAlts(from,to){
     return {names, line: rt.geometry.coordinates.map(([lo,la])=>[la,lo]), km: rt.distance/1000, min: rt.duration/60}; });
 }
 async function avisoRoute(from){ const q=S.quiz; if(!q) return; const it=ITEMS[q.ids[q.i]]; q.rtFrom=from; q.rt="loading"; render();
-  try{ await loadGeo(); const to=itemLL(it); if(!to) throw new Error("sin ubicación"); const rs=await osrmAlts(STATIONS[from].ll,to); if(S.quiz!==q || q.rtFrom!==from) return; q.rt=rs; }
+  try{ await loadGeo(); const to=itemLL(it); if(!to) throw new Error("sin ubicación"); const rs=await habitualRoutes(from,to); if(S.quiz!==q || q.rtFrom!==from) return; q.rt=rs; }
   catch(e){ if(S.quiz!==q) return; q.rt={err:"No se ha podido calcular la ruta ahora mismo (el servicio de rutas no responde). Prueba en un rato."}; }
   render(); }
 function avisoLocHTML(it){
@@ -1972,7 +2009,7 @@ function avisoLocHTML(it){
     h+=`<div class="eyebrow" style="margin:12px 0 6px">Recorrido (opcional)</div><div class="row">${ps.map(pk=>`<button class="btn ${q.rtFrom===pk?"":"ghost"} small" data-avrt="${pk}">Desde ${esc(STATIONS[pk].n.replace("Parque ",""))}${pk===it[3]?" · actúa":" · apoya"}</button>`).join("")}</div>`;
     if(q.rt==="loading") h+=`<p class="muted" style="margin:8px 0 0">Calculando recorridos…</p>`;
     else if(q.rt?.err) h+=`<div class="notice bad" style="margin-top:8px">${esc(q.rt.err)}</div>`;
-    else if(Array.isArray(q.rt)){ h+=`<div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">${q.rt.map((r,k)=>`<div><div class="spread" style="font-size:14px"><span><i style="display:inline-block;width:18px;height:5px;border-radius:3px;background:${RTCOL[k]};vertical-align:middle;margin-right:6px"></i><b>${k?`Alternativa ${q.rt.length>2?k:""}`:"Más rápida"}</b></span><span class="muted">${r.km.toFixed(1).replace(".",",")} km · ${Math.round(r.min)} min</span></div><div class="muted" style="font-size:13px;margin-top:3px;line-height:1.45">${r.names.map(esc).join(" – ")}</div></div>`).join("")}${q.rt.length<2?`<p class="muted" style="font-size:13px;margin:0">No hay una alternativa razonable para este trayecto.</p>`:""}</div><p class="muted" style="font-size:12px;margin:8px 0 0">Calculado con OpenStreetMap, en coche. Puede no coincidir con las salidas de la academia.</p>`; }
+    else if(Array.isArray(q.rt)){ h+=`<div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">${q.rt.map((r,k)=>`<div><div class="spread" style="font-size:14px"><span><i style="display:inline-block;width:18px;height:5px;border-radius:3px;background:${RTCOL[k]};vertical-align:middle;margin-right:6px"></i><b>${k?`Alternativa ${q.rt.length>2?k:""}`:"Más rápida"}</b></span><span class="muted">${r.km.toFixed(1).replace(".",",")} km · ${Math.round(r.min)} min</span></div><div class="muted" style="font-size:13px;margin-top:3px;line-height:1.45">${r.names.map(esc).join(" – ")}</div></div>`).join("")}${q.rt.length<2?`<p class="muted" style="font-size:13px;margin:0">No hay una alternativa razonable para este trayecto.</p>`:""}</div><p class="muted" style="font-size:12px;margin:8px 0 0">En coche con OpenStreetMap, saliendo por las salidas habituales del parque.</p>`; }
   }
   h+=`</div>`;
   h+= L ? `<button class="btn" id="nextQ">${q.i+1<q.ids.length?"Siguiente aviso":"Ver resultado"}</button>` : `<button class="btn ghost small" id="avSkip" style="align-self:flex-start">No lo sé, enséñamelo</button>`;
