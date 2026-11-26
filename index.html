@@ -117,6 +117,11 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .progress{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
 .progress i{display:block;height:100%;background:var(--brand);transition:width .25s}
 .plaque{background:var(--plaque-bg);color:var(--plaque-ink);border:3px solid var(--plaque-rim);border-radius:14px;box-shadow:inset 0 0 0 4px var(--plaque-bg),inset 0 0 0 5.5px var(--plaque-rim);padding:22px 20px;text-align:center;min-height:132px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.plaque[data-fav]{cursor:pointer;position:relative;-webkit-tap-highlight-color:transparent;transition:background-color .2s,color .2s,transform .12s}
+.plaque[data-fav]:active{transform:scale(.985)}
+.plaque.fav{--plaque-bg:#F4C21B;--plaque-ink:#141414;--plaque-rim:#141414;--plaque-sub:#3D3300}
+.plaque .favmark{position:absolute;top:8px;right:12px;font-size:20px;line-height:1;opacity:.35}
+.plaque.fav .favmark{opacity:1}
 .plaque .kind{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.14em;text-transform:uppercase;opacity:.75}
 .plaque .name{font-family:var(--display);font-weight:700;font-size:clamp(24px,6vw,34px);line-height:1.08;text-transform:uppercase;overflow-wrap:anywhere}
 .plaque .info{font-size:14px;color:var(--plaque-sub);overflow-wrap:anywhere}
@@ -244,6 +249,8 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .pill.done{background:var(--good-bg);color:var(--good)}
 .pill.going{background:var(--half-bg);color:var(--half)}
 .fails{display:flex;flex-direction:column}
+/* "Siguiente" siempre a mano en el móvil: se queda pegado abajo mientras haya contenido debajo */
+#nextQ,#rnext{position:sticky;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:30;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .star{background:none;border:0;padding:0 6px 0 0;margin:0;font-size:19px;line-height:1;color:var(--muted);cursor:pointer;vertical-align:-2px;-webkit-tap-highlight-color:transparent}
 .star.on,.starbtn.on{color:#E8B23A}.star:active{transform:scale(1.25)}
 .btn.starbtn{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font-size:14px;padding-right:14px}
@@ -318,7 +325,7 @@ const firebaseConfig = {
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
 const DATA_V = "20";
-const APP_V = "40";
+const APP_V = "42";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 // Solo recarga si version.txt es MÁS NUEVO que esta página, y lo hace con ?v= para saltarse la caché del navegador y de GitHub.
@@ -1851,9 +1858,11 @@ function quizHTML(){
   const multi = Array.isArray(it[3]), hasA = !multi && it[4]>=0;
   const title = q.mode==="boss"?"Jefe final":q.mode==="aviso"?"Modo aviso":q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="fav"?"Favoritas":q.mode==="srs"?"Repaso":q.mode==="duel"?"Duelo 1 vs 1":q.mode==="barrio"?"Práctica de barrio":q.mode==="surv"?"Supervivencia":"Entreno libre";
   const got = q.results.reduce((s,r)=>s+r.sc,0);
+  const canFav = SRS.loaded && S.pid, fv = canFav && isFav(id);
+  const pFav = fv?" fav":"", pAttr = canFav?`data-fav="${id}" role="button" aria-pressed="${fv}" title="Toca el cartel para guardarla en favoritas"`:"", pMark = canFav?`<span class="favmark" aria-hidden="true">${fv?"★":"☆"}</span>`:"";
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got+(q.bonus||0))} pts${COMBO_MODES.has(q.mode)&&q.combo>=3?`<span class="combo${q.combo>=10?" hot":""}">🔥 ${q.combo}${comboMult(q.combo)>1?` · ×${String(comboMult(q.combo)).replace(".",",")}`:""}</span>`:""}</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
-    ${q.mode==="aviso"?`<div class="plaque"><span class="kind aviso-kind">Aviso 112 · ${esc(avisoText(id))}</span><span class="name">${esc(it[1])}</span>${q.answered?`<span class="info">${esc(it[0]==="C"?"Calle":kindOf(it))}</span>`:""}</div>`:`<div class="plaque"><span class="kind">${esc(kindOf(it))}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])&&(q.mode==="daily"||(S.free.addr&&!(q.mode==="free"&&S.free.blocks.has("R")&&!S.free.blocks.has("E")&&(BYBLOCK.R||[]).includes(id)))||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`}`;
+    ${q.mode==="aviso"?`<div class="plaque${pFav}" ${pAttr}>${pMark}<span class="kind aviso-kind">Aviso 112 · ${esc(avisoText(id))}</span><span class="name">${esc(it[1])}</span>${q.answered?`<span class="info">${esc(it[0]==="C"?"Calle":kindOf(it))}</span>`:""}</div>`:`<div class="plaque${pFav}" ${pAttr}>${pMark}<span class="kind">${esc(kindOf(it))}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])&&(q.mode==="daily"||(S.free.addr&&!(q.mode==="free"&&S.free.blocks.has("R")&&!S.free.blocks.has("E")&&(BYBLOCK.R||[]).includes(id)))||q.answered)?`<span class="info">${esc(it[2])}</span>`:""}</div>`}`;
   const isS = it[0]==="S";
   const btns = (row) => (isS?SZONES:PARKS).map((_,i)=>{
     let cls = "", pressed = row==="multi"?q.sel.multi.has(i):q.sel[row]===i;
@@ -1874,7 +1883,6 @@ function quizHTML(){
     const sc = q.results[q.results.length-1].sc;
     const v = sc===1?"v1":sc===0.5?"v05":"v0";
     h += `<div class="verdict ${v}" role="status"><span>${sc===1?"Correcto":sc===0.5?"Medio acierto":"Fallo"} · ${ansHTML(it)}</span><span class="pts">+${fmt(sc)}</span></div>
-      ${SRS.loaded&&S.pid&&it[0]!=="S"?`<button class="btn ghost small starbtn${isFav(id)?" on":""}" data-fav="${id}" aria-pressed="${isFav(id)}">${isFav(id)?"★ En favoritas":"☆ Añadir a favoritas"}</button>`:""}
       ${zonesHTML(it,q.vp)}
       ${flagHTML(it,id)}
       ${q.mode==="aviso" ? avisoLocHTML(it) : mapHTML(it)+`
@@ -1889,7 +1897,10 @@ const REVIEW_MODES = new Set(["srs","fails","fav"]); // repasos: no cuentan para
 const isFav = id => !!(SRS.fav && SRS.fav[id]);
 function starHTML(id){ if(!SRS.loaded || !S.pid) return ""; const on=isFav(id); return `<button class="star${on?" on":""}" data-fav="${id}" aria-pressed="${on}" aria-label="${on?"Quitar de favoritas":"Añadir a favoritas"}" title="Favorita">${on?"★":"☆"}</button>`; }
 function favToggle(id){ if(!SRS.loaded) return; SRS.fav=SRS.fav||{}; if(SRS.fav[id]) delete SRS.fav[id]; else SRS.fav[id]=Date.now(); srsSave();
-  document.querySelectorAll(`[data-fav="${id}"]`).forEach(b=>{ const on=isFav(id); b.classList.toggle("on",on); b.setAttribute("aria-pressed",String(on)); b.textContent = b.classList.contains("starbtn") ? (on?"★ En favoritas":"☆ Añadir a favoritas") : (on?"★":"☆"); });
+  if(navigator.vibrate){ try{ navigator.vibrate(12); }catch{} }
+  document.querySelectorAll(`[data-fav="${id}"]`).forEach(b=>{ const on=isFav(id);
+    if(b.classList.contains("plaque")){ b.classList.toggle("fav",on); b.setAttribute("aria-pressed",String(on)); const m=b.querySelector(".favmark"); if(m) m.textContent=on?"★":"☆"; return; }
+    b.classList.toggle("on",on); b.setAttribute("aria-pressed",String(on)); b.textContent = b.classList.contains("starbtn") ? (on?"★ En favoritas":"☆ Añadir a favoritas") : (on?"★":"☆"); });
   const fc=$("#favCard"); if(fc){ fc.outerHTML=favHTML(); bindFavCard(); } }
 function bindFavCard(){ const st=$("#startFav"); if(st) st.addEventListener("click",startFav);
   document.querySelectorAll("[data-favg]").forEach(b=>b.addEventListener("click",()=>{ S.favG=b.dataset.favg||null; const fc=$("#favCard"); if(fc){ fc.outerHTML=favHTML(); bindFavCard(); } })); }
@@ -1944,7 +1955,7 @@ function answer(){
   const sc = scoreOf(it, q.sel); const ms = Math.min(120000, Math.round(performance.now()-q.t0));
   q.answered = true; q.results.push({id,sc}); q.vp = Array.isArray(it[3]) ? null : bestPair(it, q.sel);
   // Ubicaciones Saler: solo para estudiar. No suman puntos, ni estadísticas, ni fallos, ni insignias, ni repaso.
-  if(it[0]==="S"){ render(); return; }
+  if(it[0]==="S"){ render(); showVerdict(); return; }
   if(q.mode==="duel") duelAnswer(q, id, sc, ms);
   q.tms=(q.tms||0)+ms;
   let bonus=0;
@@ -1972,8 +1983,12 @@ function answer(){
   if(q.mode==="srs"){ if(!q.seen.has(id)){ q.seen.add(id); if(q.newSet.has(id)){ if(SRS.nd!==today()){ SRS.nd=today(); SRS.nn=0; } SRS.nn++; } srsAnswer(id, sc, true); } }
   else srsAnswer(id, sc, false);
   if(SRS.loaded && S.pid && !Array.isArray(it[3]) && q.mode!=="barrio"){ SRS.lo[id]=sc; hPush(id,sc); srsSaveLazy(); }
-  render();
+  render(); showVerdict();
 }
+// Tras responder: que se vea el veredicto justo encima del botón "Siguiente" (que va pegado abajo).
+function showVerdict(){ requestAnimationFrame(()=>{ const v=document.querySelector("main .verdict"), n=$("#nextQ"); if(!v) return;
+  const gap=(n?n.offsetHeight:0)+28, over=v.getBoundingClientRect().bottom-(innerHeight-gap);
+  if(over>0) window.scrollBy({top:over, behavior:"smooth"}); }); }
 function mapHTML(it){
   const ll = it[5]!=null ? [it[5],it[6]] : null;
   if(!ll && it[9]==null) return "";
