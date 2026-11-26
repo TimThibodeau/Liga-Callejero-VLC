@@ -244,6 +244,9 @@ section.view{display:flex;flex-direction:column;gap:16px}
 .pill.done{background:var(--good-bg);color:var(--good)}
 .pill.going{background:var(--half-bg);color:var(--half)}
 .fails{display:flex;flex-direction:column}
+.star{background:none;border:0;padding:0 6px 0 0;margin:0;font-size:19px;line-height:1;color:var(--muted);cursor:pointer;vertical-align:-2px;-webkit-tap-highlight-color:transparent}
+.star.on,.starbtn.on{color:#E8B23A}.star:active{transform:scale(1.25)}
+.btn.starbtn{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font-size:14px;padding-right:14px}
 .fails .f{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
 .fails .f:last-child{border-bottom:0}
 .fails .f span:first-child{min-width:0;overflow-wrap:anywhere}
@@ -315,7 +318,7 @@ const firebaseConfig = {
 const PARKS = ["NORTE","SUR","OESTE","CAMPANAR","SALER"];
 const PSHORT = ["Norte","Sur","Oeste","Campanar","Saler"];
 const DATA_V = "20";
-const APP_V = "37";
+const APP_V = "39";
 // Si hay una versión nueva subida, las pestañas abiertas se recargan solas (cuando no estás a mitad de preguntas),
 // para que una pestaña vieja no guarde datos con código antiguo.
 function checkVersion(){ fetch("version.txt?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():null).then(v=>{ v=(v||"").trim(); if(v && v!==APP_V && !S.quiz) location.reload(); }).catch(()=>{}); }
@@ -533,7 +536,7 @@ function medalsOf(lo){ return parkIds().map((ids,k)=>{ let a=0,sum=0; if(lo) for
   return {k,name:PSHORT[k],a,tot:ids.length,cov,acc,t}; }).filter(m=>m.tot>=10); }
 function rankScore(lo){ let n=0,sum=0; if(lo) for(const k in lo){ const it=ITEMS[k]; if(!it||it[0]==="S"||it[0]==="J") continue; n++; sum+=lo[k]; } return {n, acc:n?100*sum/n:0}; }
 function rankAcc(pid){ const d=S.days[pid]||{}, from=addDays(today(),-(RANK_DAYS-1)); let n=0, ok=0;
-  for(const ds in d){ if(ds<from) continue; const doc=d[ds]; if(doc.dy?.done){ n += doc.dy.n || (doc.dy.ans||[]).length || 10; ok += doc.dy.pts||0; } if(doc.fr){ n += doc.fr.n||0; ok += doc.fr.pts||0; } }
+  for(const ds in d){ if(ds<from) continue; const doc=d[ds]; if(doc.dy?.done){ n += doc.dy.n || (doc.dy.ans||[]).length || 10; ok += doc.dy.pts||0; } if(doc.fr){ n += (doc.fr.n||0)-(doc.fr.rn||0); ok += (doc.fr.pts||0)-(doc.fr.rp||0); } }
   return {n, acc:n?100*ok/n:0}; }
 function rankOf(pid){ if(!S.players[pid]) return null; const lo = pid===S.pid && SRS.loaded ? SRS.lo : BAR.lo[pid]; const {n,acc}=rankAcc(pid);
   let i=RANK_FLOOR; if(n>=RANK_MIN) while(i+1<RANKS.length && acc>=RANKS[i+1][0]) i++;
@@ -653,7 +656,7 @@ function rankCardHTML(){
 }
 // ----- COMBOS -----
 const comboMult = c => c>=10 ? 1.5 : 1;
-const COMBO_MODES = new Set(["free","aviso","srs","fails","barrio"]);
+const COMBO_MODES = new Set(["free","aviso","srs","fails","fav","barrio"]);
 // ----- MODO AVISO -----
 const AV_T = {
   "Teatro":["Humo en la sala principal","Incendio en el escenario","Persona atrapada en el ascensor"], "Cine":["Humo en una sala","Incendio en la cabina de proyección"],
@@ -709,7 +712,7 @@ function setView(v){
 }
 document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.v)));
 
-function quizHome(m){ return m==="daily"?"hoy":m==="duel"?"duelos":(m==="srs"||m==="fails")?"fallos":m==="aviso"?"rutas":"libre"; }
+function quizHome(m){ return m==="daily"?"hoy":m==="duel"?"duelos":(m==="srs"||m==="fails"||m==="fav")?"fallos":m==="aviso"?"rutas":"libre"; }
 function render(){
   document.querySelectorAll("nav.tabs button").forEach(b=>{
     b.setAttribute("aria-selected", String(b.dataset.v===S.view || (S.view==="rutas" && b.dataset.v==="fallos")));
@@ -874,7 +877,7 @@ function ligaHTML(){
     for(const ds in d){ if(ds<from||ds>to) continue; const doc=d[ds];
       pts += dayPts(doc);
       if(doc.dy?.done){ retos++; dpts += doc.dy.pts; n += doc.dy.n || (doc.dy.ans||[]).length || 10; ok += doc.dy.pts; }
-      if(doc.fr){ n += doc.fr.n||0; ok += doc.fr.pts||0; }
+      if(doc.fr){ n += (doc.fr.n||0)-(doc.fr.rn||0); ok += (doc.fr.pts||0)-(doc.fr.rp||0); }
     }
     return {p,pts,dpts,retos,n,acc:n?ok/n:0,streak:streak(p.id)};
   }).sort((a,b)=> S.rankSort==="reto" ? (b.dpts-a.dpts || b.pts-a.pts) : S.rankSort==="acc" ? (((b.n>=30)-(a.n>=30)) || b.acc-a.acc) : (b.pts-a.pts || b.acc-a.acc));
@@ -928,15 +931,17 @@ function srsRef(){ return S.db && S.pid ? S.db.doc(`players/${S.pid}/srs/main`) 
 function ensureSrs(){ if(S.db && S.pid && SRS.pidSub!==S.pid){ SRS.pidSub=S.pid; srsSubscribe(); } }
 function srsSubscribe(){
   if(SRS.sub){ try{SRS.sub();}catch{} SRS.sub=null; }
-  SRS.loaded=false; SRS.c={}; SRS.lo={}; SRS.h={}; S.hSeeded=false; SRS.cfg={n:10,b:["C"]}; SRS.nd=""; SRS.nn=0;
+  SRS.loaded=false; SRS.c={}; SRS.lo={}; SRS.h={}; SRS.fav={}; S.hSeeded=false; SRS.cfg={n:10,b:["C"]}; SRS.nd=""; SRS.nn=0;
   const ref=srsRef(); if(!ref) return;
   SRS.sub = ref.onSnapshot(snap=>{
     if(SRS.busy || SRS.dirty) return;
     const v = snap.exists ? snap.data() : null;
-    if(v){ SRS.lo={...(v.lo||{})}; SRS.h={...(v.h||{})}; SRS.c={...(v.c||{})}; SRS.cfg={n:10,b:["C"],...(v.cfg||{})}; SRS.nd=v.nd||""; SRS.nn=v.nn||0; }
+    if(v){ SRS.lo={...(v.lo||{})}; SRS.h={...(v.h||{})}; SRS.fav={...(v.fav||{})}; SRS.c={...(v.c||{})}; SRS.cfg={n:10,b:["C"],...(v.cfg||{})}; SRS.nd=v.nd||""; SRS.nn=v.nn||0; }
     const first = !SRS.loaded; SRS.loaded=true;
     if(first){ srsSeed(); loSeed(); hSeed(); srsSpread(); }
-    if(!S.quiz && !(S.route && S.view==="rutas")) render();
+    // Nuestro propio guardado: los datos ya están en pantalla, no hace falta repintar (no rompe el buscador ni los mapas).
+    const own = !first && (snap.metadata?.hasPendingWrites || Date.now()-(SRS.selfAt||0)<4000);
+    if(!own && !S.quiz && !(S.route && S.view==="rutas")) render();
   }, e=>{ SRS.loaded=true; srsError(e); });
 }
 function srsSeed(){
@@ -981,8 +986,8 @@ function srsSave(){ SRS.dirty=true; clearTimeout(SRS.timer); SRS.timer=setTimeou
 async function srsFlush(){
   const ref=srsRef(); if(!ref || !S.canWrite){ SRS.dirty=false; return; }
   if(SRS.busy){ SRS.timer=setTimeout(srsFlush,500); return; }
-  SRS.busy=true; SRS.dirty=false;
-  try{ await ref.set({c:SRS.c, lo:SRS.lo||{}, h:SRS.h||{}, cfg:SRS.cfg, nd:SRS.nd, nn:SRS.nn, u:Date.now()}); }catch(e){ srsError(e); }
+  SRS.busy=true; SRS.dirty=false; SRS.selfAt=Date.now();
+  try{ await ref.set({c:SRS.c, lo:SRS.lo||{}, h:SRS.h||{}, fav:SRS.fav||{}, cfg:SRS.cfg, nd:SRS.nd, nn:SRS.nn, u:Date.now()}); }catch(e){ srsError(e); }
   SRS.busy=false;
 }
 function srsError(e){ try{console.error("Repaso",e);}catch{} S.writeError="No se ha podido guardar el repaso. En la web de GitHub, revisa que has pegado las reglas nuevas en Firebase (Firestore → Reglas)."; render(); }
@@ -1048,6 +1053,7 @@ function fallosHTML(){
       <div><div class="eyebrow" style="margin-bottom:8px">Máximo de repasos al día</div><div class="seg" role="group">${[[50,"50"],[100,"100"],[150,"150"],[0,"Sin límite"]].map(([n,l])=>`<button data-srscap="${n}" aria-pressed="${srsCap()===n}">${l}</button>`).join("")}</div><p class="muted" style="font-size:13px;margin:6px 0 0">Si se te acumulan más, se reparten solos en los días siguientes, empezando por tus bestias negras. Así nunca ves una montaña de pendientes.</p></div>
       <div><div class="eyebrow" style="margin-bottom:8px">Las nuevas salen de</div><div class="chips">${["C","E","M","H","G","K"].map(b=>`<button class="chip" data-srsb="${b}" aria-pressed="${(SRS.cfg.b||[]).includes(b)}">${BLOCKS[b]}</button>`).join("")}</div></div></div>`;
     const beasts = cards.map(k=>({id:+k,c:srsGet(k)})).filter(x=>x.c.l>=2).sort((a,b)=>b.c.l-a.c.l).slice(0,15);
+    h += favHTML();
     h += routesBtnHTML();
     if(beasts.length) h += `<div class="card"><div class="spread"><span class="eyebrow">Tus bestias negras</span><span class="row" style="gap:6px"><button class="btn ghost small" id="bprev" aria-label="Anterior">‹</button><span class="muted num" id="bpos" style="font-size:15px">1 de ${beasts.length}</span><button class="btn ghost small" id="bnext" aria-label="Siguiente">›</button></span></div><div class="bcar" id="bcar">${beasts.map(x=>{const it=ITEMS[x.id]; return `<div class="bcard" data-bi="${x.id}"><span class="kind">${esc(kindOf(it))}</span><b class="bn">${esc(it[1])}</b>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])?`<span class="muted bi">${esc(it[2])}</span>`:""}<div class="bp">${ansHTML(it)}</div><span class="pill lost">${x.c.l} fallos</span></div>`;}).join("")}</div>${window.L?`<div id="beastmap" class="beastmap" role="img" aria-label="Mapa de la bestia negra"></div>`:""}</div>`;
   }
@@ -1729,13 +1735,13 @@ function searchResults(){
   const box=$("#srchR"); if(!box) return; const q=S.srchQ||"";
   if(S.srchSel!=null && ITEMS[S.srchSel]){ const it=ITEMS[S.srchSel];
     box.innerHTML=`<div class="plaque" style="margin-top:4px"><span class="kind">${esc(kindOf(it))}</span><span class="name">${esc(it[1])}</span>${it[2]&&it[2]!=="null"&&!"PKS".includes(it[0])?`<span class="info">${esc(it[2])}</span>`:""}</div>
-      <div class="verdict v1" style="margin-top:8px"><span>${ansHTML(it)}</span></div>${zonesHTML(it,null)}${mapHTML(it)}<button class="btn ghost small" id="srchBack" style="margin-top:8px">← Volver a los resultados</button>`;
+      <div class="verdict v1" style="margin-top:8px"><span>${ansHTML(it)}</span></div>${SRS.loaded&&S.pid?`<button class="btn ghost small starbtn${isFav(S.srchSel)?" on":""}" data-fav="${S.srchSel}" aria-pressed="${isFav(S.srchSel)}" style="margin-top:8px">${isFav(S.srchSel)?"★ En favoritas":"☆ Añadir a favoritas"}</button>`:""}${zonesHTML(it,null)}${mapHTML(it)}<button class="btn ghost small" id="srchBack" style="margin-top:8px">← Volver a los resultados</button>`;
     const b=$("#srchBack"); if(b) b.addEventListener("click",()=>{ S.srchSel=null; searchResults(); });
     const zt=$("#zonasT"); if(zt) zt.addEventListener("click",()=>{ S.zonas=!zonasOn(); try{ localStorage.setItem("cbl.zonas",S.zonas?"1":"0"); }catch{} searchResults(); });
     drawMap(); return; }
   if(normS(q).length<2){ box.innerHTML=""; return; }
   const ids=searchRun(q);
-  box.innerHTML = ids.length ? `<div class="fails">${ids.map(i=>{ const it=ITEMS[i]; return `<div class="f"><button class="linkbtn" data-ssel="${i}" style="text-align:left">${esc(it[1])}</button><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><span class="muted" style="font-size:12px">${esc(it[0]==="C"?"Calle":kindOf(it))}</span>${ansHTML(it)}</span></div>`; }).join("")}</div>` : `<p class="muted" style="margin:6px 0 0">No encuentro nada con eso.</p>`;
+  box.innerHTML = ids.length ? `<div class="fails">${ids.map(i=>{ const it=ITEMS[i]; return `<div class="f"><span style="display:flex;align-items:flex-start;min-width:0">${starHTML(i)}<button class="linkbtn" data-ssel="${i}" style="text-align:left">${esc(it[1])}</button></span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><span class="muted" style="font-size:12px">${esc(it[0]==="C"?"Calle":kindOf(it))}</span>${ansHTML(it)}</span></div>`; }).join("")}</div>` : `<p class="muted" style="margin:6px 0 0">No encuentro nada con eso.</p>`;
   box.querySelectorAll("[data-ssel]").forEach(b=>b.addEventListener("click",()=>{ S.srchSel=+b.dataset.ssel; searchResults(); }));
 }
 function bindSearch(){
@@ -1841,7 +1847,7 @@ function quizHTML(){
   if(q.i>=q.ids.length) return summaryHTML();
   const id = q.ids[q.i], it = ITEMS[id];
   const multi = Array.isArray(it[3]), hasA = !multi && it[4]>=0;
-  const title = q.mode==="boss"?"Jefe final":q.mode==="aviso"?"Modo aviso":q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="srs"?"Repaso":q.mode==="duel"?"Duelo 1 vs 1":q.mode==="barrio"?"Práctica de barrio":q.mode==="surv"?"Supervivencia":"Entreno libre";
+  const title = q.mode==="boss"?"Jefe final":q.mode==="aviso"?"Modo aviso":q.mode==="daily"?"Reto del día":q.mode==="fails"?"Repaso de fallos":q.mode==="fav"?"Favoritas":q.mode==="srs"?"Repaso":q.mode==="duel"?"Duelo 1 vs 1":q.mode==="barrio"?"Práctica de barrio":q.mode==="surv"?"Supervivencia":"Entreno libre";
   const got = q.results.reduce((s,r)=>s+r.sc,0);
   let h = `<div class="qhead">${q.mode==="surv" ? `<span class="eyebrow">${title} · tu récord ${q.prev||0}</span><span class="num" style="font-size:20px;font-weight:700">Racha ${q.results.filter(r=>r.sc===1).length}</span></div>` : `<span class="eyebrow">${title} · ${q.i+1} de ${q.ids.length}</span><span class="num" style="font-size:20px;font-weight:700">${fmt(got+(q.bonus||0))} pts${COMBO_MODES.has(q.mode)&&q.combo>=3?`<span class="combo${q.combo>=10?" hot":""}">🔥 ${q.combo}${comboMult(q.combo)>1?` · ×${String(comboMult(q.combo)).replace(".",",")}`:""}</span>`:""}</span></div>
     <div class="progress"><i style="width:${100*q.i/q.ids.length}%"></i></div>`}
@@ -1866,6 +1872,7 @@ function quizHTML(){
     const sc = q.results[q.results.length-1].sc;
     const v = sc===1?"v1":sc===0.5?"v05":"v0";
     h += `<div class="verdict ${v}" role="status"><span>${sc===1?"Correcto":sc===0.5?"Medio acierto":"Fallo"} · ${ansHTML(it)}</span><span class="pts">+${fmt(sc)}</span></div>
+      ${SRS.loaded&&S.pid&&it[0]!=="S"?`<button class="btn ghost small starbtn${isFav(id)?" on":""}" data-fav="${id}" aria-pressed="${isFav(id)}">${isFav(id)?"★ En favoritas":"☆ Añadir a favoritas"}</button>`:""}
       ${zonesHTML(it,q.vp)}
       ${flagHTML(it,id)}
       ${q.mode==="aviso" ? avisoLocHTML(it) : mapHTML(it)+`
@@ -1873,6 +1880,42 @@ function quizHTML(){
   }
   if(!q.answered && q.mode!=="daily") h += `<button class="btn ghost small" id="quitQ" style="align-self:flex-start">${q.mode==="surv"?"Plantarse y guardar la racha":q.mode==="srs"?"Dejar el repaso (se guarda)":q.mode==="duel"?"Dejar el duelo (se guarda)":"Dejar la tanda"}</button>`;
   return h;
+}
+
+// ----- FAVORITAS -----
+const REVIEW_MODES = new Set(["srs","fails","fav"]); // repasos: no cuentan para el % de acierto
+const isFav = id => !!(SRS.fav && SRS.fav[id]);
+function starHTML(id){ if(!SRS.loaded || !S.pid) return ""; const on=isFav(id); return `<button class="star${on?" on":""}" data-fav="${id}" aria-pressed="${on}" aria-label="${on?"Quitar de favoritas":"Añadir a favoritas"}" title="Favorita">${on?"★":"☆"}</button>`; }
+function favToggle(id){ if(!SRS.loaded) return; SRS.fav=SRS.fav||{}; if(SRS.fav[id]) delete SRS.fav[id]; else SRS.fav[id]=Date.now(); srsSave();
+  document.querySelectorAll(`[data-fav="${id}"]`).forEach(b=>{ const on=isFav(id); b.classList.toggle("on",on); b.setAttribute("aria-pressed",String(on)); b.textContent = b.classList.contains("starbtn") ? (on?"★ En favoritas":"☆ Añadir a favoritas") : (on?"★":"☆"); });
+  const fc=$("#favCard"); if(fc){ fc.outerHTML=favHTML(); bindFavCard(); } }
+function bindFavCard(){ const st=$("#startFav"); if(st) st.addEventListener("click",startFav);
+  document.querySelectorAll("[data-favg]").forEach(b=>b.addEventListener("click",()=>{ S.favG=b.dataset.favg||null; const fc=$("#favCard"); if(fc){ fc.outerHTML=favHTML(); bindFavCard(); } })); }
+document.addEventListener("click", e=>{ const b=e.target.closest("[data-fav]"); if(!b) return; e.preventDefault(); favToggle(+b.dataset.fav); });
+// Carpetas automáticas según el tipo de sitio.
+let _RSET=null; const RSET=()=>_RSET||(_RSET=new Set(BYBLOCK.R||[]));
+function favGroups(id){ const it=ITEMS[id], g=[], nm=String(it[1]||"").toUpperCase(), pre=nm.split(" ")[0];
+  if(nm.includes("ALQUER")) g.push("Alquerías");
+  if(it[0]==="C"){ if(pre==="ENTD") g.push("Entradores");
+    else if(["CAMI","CAMINO","SENDA","CTRA","CV","PTDA","PARTIDA","CARRERÓ","TRAMO"].includes(pre)) g.push("Caminos y carreteras");
+    else if(["PL","PL.","GLORIETA"].includes(pre)) g.push("Plazas");
+    else if(["AV","AV.","GV","PG","PONT","PUENTE"].includes(pre)) g.push("Avenidas, paseos y puentes");
+    else g.push("Calles"); }
+  else { if(it[0]==="E" && RSET().has(id)) g.push("Equipamientos clave"); g.push(BLOCKS[it[0]]||"Otros"); }
+  return g; }
+function favIds(){ return Object.keys(SRS.fav||{}).map(Number).filter(i=>ITEMS[i]).sort((a,b)=>(SRS.fav[b]||0)-(SRS.fav[a]||0)); }
+function favPool(){ const ids=favIds(), g=S.favG; return g ? ids.filter(i=>favGroups(i).includes(g)) : ids; }
+function startFav(){ const pool=favPool(); if(!pool.length) return; startQuiz("fav", sample(pool, Math.min(pool.length, 20), Math.random)); }
+function favHTML(){
+  if(!SRS.loaded || !S.pid) return "";
+  const ids=favIds();
+  if(!ids.length) return `<div class="card" id="favCard"><h3 style="font-size:22px">Favoritas <span class="muted" style="font-size:16px">· <span id="favCount">0</span></span></h3><p class="muted" style="margin:4px 0 0;font-size:14px">Marca con ☆ cualquier calle o sitio al terminar una tanda o al corregir una pregunta, y aquí podrás repasar solo esas. Se ordenan solas por tipo: alquerías, entradores, plazas…</p></div>`;
+  const cnt={}; for(const i of ids) for(const g of favGroups(i)) cnt[g]=(cnt[g]||0)+1;
+  if(S.favG && !cnt[S.favG]) S.favG=null;
+  const pool=favPool(), n=Math.min(pool.length,20);
+  return `<div class="card" id="favCard"><div class="spread"><div style="flex:1 1 220px;min-width:0"><h3 style="font-size:22px">Favoritas <span class="muted" style="font-size:16px">· <span id="favCount">${ids.length}</span></span></h3><p class="muted" style="margin:2px 0 0;font-size:14px">Repasa solo las que has marcado. No cuenta para tu % de acierto.</p></div><button class="btn" id="startFav">${pool.length>n?`Repasar ${n} de ${pool.length}`:`Repasar ${pool.length}`}</button></div>
+    <div class="chips" style="margin-top:10px"><button class="chip" data-favg="" aria-pressed="${!S.favG}">Todas<span class="c">${ids.length}</span></button>${Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]).map(g=>`<button class="chip" data-favg="${esc(g)}" aria-pressed="${S.favG===g}">${esc(g)}<span class="c">${cnt[g]}</span></button>`).join("")}</div>
+    <details class="salidas" style="margin-top:10px"><summary><span><b>Ver la lista</b></span><span class="muted">${pool.length}</span></summary><div class="fails">${pool.map(i=>{ const it=ITEMS[i]; return `<div class="f"><span>${starHTML(i)}<b>${esc(it[1])}</b></span>${ansHTML(it)}</div>`; }).join("")}</div></details></div>`;
 }
 function summaryHTML(){
   const q = S.quiz; const tot = q.results.reduce((s,r)=>s+r.sc,0);
@@ -1887,7 +1930,11 @@ function summaryHTML(){
     ${q.bonus?`<p style="margin:8px 0 0">🔥 Mejor combo: <b>${q.best}</b> seguidas · <b>+${fmt(q.bonus)}</b> puntos extra para la liga.</p>`:""}
     ${q.mode==="srs"?`<p class="muted" style="margin:8px 0 0">Mañana te tocan ${srsForecast(1)} tarjetas.</p>`:""}${q.mode==="duel"?duelSummary(q):""}
     <div class="row" style="margin-top:14px">${q.mode==="daily"?`<button class="btn" id="seeRank">Ver la clasificación</button>`:q.mode==="srs"?(srsDueCount()?`<button class="btn" id="again">Seguir repasando</button>`:""):q.mode==="duel"||q.mode==="boss"?"":`<button class="btn" id="again">${q.mode==="aviso"?"Otra guardia":"Otra tanda"}</button>`}<button class="btn ghost" id="closeQ">Cerrar</button></div></div>`;
-  if(miss.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Para repasar</div><div class="fails">${miss.map(r=>{const it=ITEMS[r.id]; return `<div class="f"><span>${markHTML(r.sc)} <b>${esc(it[1])}</b></span>${ansHTML(it)}</div>`;}).join("")}</div></div>`;
+  { const last=new Map(); for(const r of q.results) last.set(r.id, r.sc); const all=[...last].map(([id,sc])=>({id,sc}));
+    const row=r=>{ const it=ITEMS[r.id]; return `<div class="f"><span>${starHTML(r.id)}${markHTML(r.sc)} <b>${esc(it[1])}</b></span>${ansHTML(it)}</div>`; };
+    const bad=all.filter(r=>r.sc<1), good=all.filter(r=>r.sc>=1);
+    if(bad.length) h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Para repasar</div><div class="fails">${bad.map(row).join("")}</div></div>`;
+    if(good.length && q.mode!=="surv") h += `<div class="card"><div class="eyebrow" style="margin-bottom:6px">Acertadas</div><div class="fails">${good.map(row).join("")}</div></div>`; }
   return h;
 }
 function answer(){
@@ -1913,7 +1960,7 @@ function answer(){
         if(d.dy.ans.length>=q.ids.length){ d.dy.done = true; d.dy.end = Date.now(); }
       } else {
         d.fr = d.fr || {n:0,pts:0,ok:0};
-        d.fr.n++; d.fr.pts += sc; if(sc===1) d.fr.ok++; if(bonus) d.fr.bonus = Math.round(((d.fr.bonus||0)+bonus)*10)/10;
+        d.fr.n++; d.fr.pts += sc; if(sc===1) d.fr.ok++; if(REVIEW_MODES.has(q.mode)){ d.fr.rn=(d.fr.rn||0)+1; d.fr.rp=(d.fr.rp||0)+sc; } if(bonus) d.fr.bonus = Math.round(((d.fr.bonus||0)+bonus)*10)/10;
         if(q.mode==="surv" && sc<1) addSurv(d, q.results.length-1);
       }
       recordOutcome(d, id, sc);
@@ -1940,7 +1987,7 @@ function hexMix(a,b,t){ const h=x=>{ x=String(x).trim().replace("#",""); if(x.le
 function zoneAt(Z,ll){ const x=ll[1], y=ll[0]; for(const z of Z) for(const pg of z.polys){ const rs=pg.map(r=>r.map(([la,lo])=>[lo,la])); if(polyContains(rs,x,y)) return z; } return null; }
 const zoneCol = z => hexMix(parkColor(z.p), parkColor(z.a), .3);
 function drawZonas(m, ll){
-  return loadZonas().then(Z=>{ if(!Z.length) return;
+  return loadZonas().then(Z=>{ if(!Z.length || !m._mapPane || !document.body.contains(m.getContainer())) return;
     const leg=document.getElementById("zleg"), shapes=[]; if(!m.getPane("zonas")){ m.createPane("zonas").style.zIndex=350; m.createPane("zlab").style.zIndex=380; }
     const here = ll ? zoneAt(Z,ll) : null;
     for(const z of Z){ const cp=zoneCol(z), nm=`${PSHORT[z.p]} · apoyo ${PSHORT[z.a]}`;
@@ -2044,7 +2091,7 @@ function bindView(){
   on("#startDaily", ()=>{ if(S.db && !S.flagsLoaded) return; if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("daily", dailyIds(today())); });
   on("#startFree", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); });
   on("#startFails", ()=>{ const s=[...pendingFails()]; startQuiz("fails", sample(s, Math.min(20,s.length), Math.random)); });
-  on("#nextQ", next); on("#goRutas", ()=>setView("rutas"));
+  on("#nextQ", next); on("#goRutas", ()=>setView("rutas")); bindFavCard();
   on("#zonasT", ()=>{ S.zonas=!zonasOn(); try{ localStorage.setItem("cbl.zonas",S.zonas?"1":"0"); }catch{} render(); });
   on("#startSrs", startSrs);
   on("#duelsAll", ()=>{ S.duelsAll=!S.duelsAll; render(); });
@@ -2090,7 +2137,7 @@ function bindView(){
   on("#closeQ", ()=>{ S.quiz=null; render(); });
   on("#startBoss", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); const ids=bossIds(today()); if(ids.length) startQuiz("boss", ids); });
   on("#startAviso", ()=>{ if(!S.pid && S.db && S.canWrite) return askWho(); startQuiz("aviso", avisoIds()); });
-  on("#again", ()=>{ const m=S.quiz.mode; S.quiz=null; if(m==="aviso") return startQuiz("aviso", avisoIds()); if(m==="surv") return startQuiz("surv", sample(activePool(BYBLOCK.C), 400, Math.random)); if(m==="srs") return startSrs(); if(m==="fails"){ const s=[...pendingFails()]; if(s.length) return startQuiz("fails", sample(s,Math.min(20,s.length),Math.random)); render(); } else { const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); } });
+  on("#again", ()=>{ const m=S.quiz.mode; S.quiz=null; if(m==="fav") return startFav(); if(m==="aviso") return startQuiz("aviso", avisoIds()); if(m==="surv") return startQuiz("surv", sample(activePool(BYBLOCK.C), 400, Math.random)); if(m==="srs") return startSrs(); if(m==="fails"){ const s=[...pendingFails()]; if(s.length) return startQuiz("fails", sample(s,Math.min(20,s.length),Math.random)); render(); } else { const pool=freePool(); startQuiz("free", sample(pool, Math.min(S.free.n,pool.length), Math.random)); } });
   on("#seeRank", ()=>{ S.quiz=null; S.rankRange="hoy"; render(); });
   on("#checkMulti", answer);
   document.querySelectorAll(".park").forEach(b=>b.addEventListener("click",()=>pickPark(b.dataset.row, +b.dataset.i)));
